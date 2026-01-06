@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  items         Item[]
+  digestLogs    DigestLog[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Application models
+enum ItemType {
+  todo
+  reminder
+  idea
+  note
+}
+
+enum ItemStatus {
+  active
+  done
+  archived
+}
+
+enum Priority {
+  P0
+  P1
+  P2
+}
+
+enum SourceType {
+  text
+  voice
+  telegram
+}
+
+model Item {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type            ItemType
+  title           String
+  details         String?    @db.Text
+  status          ItemStatus @default(active)
+  dueAt           DateTime?
+  priority        Priority?
+  tags            String[]
+
+  sourceType      SourceType
+  sourceText      String     @db.Text  // Original text or transcription
+  sourceAudioUrl  String?    // URL to audio file if voice memo
+
+  needsReview     Boolean    @default(false)
+  agentConfidence Float?
+  agentRawJson    Json?      // Store raw agent response for debugging
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, type])
+  @@index([userId, dueAt])
+  @@index([userId, needsReview])
+}
+
+model DigestLog {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date          DateTime @db.Date  // The date of the digest
+  sentAt        DateTime?
+  sentVia       String?  // "email" | "in_app"
+  content       String   @db.Text  // Rendered digest content (markdown or HTML)
+  itemsIncluded String[] // Array of item IDs included in digest
+
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
