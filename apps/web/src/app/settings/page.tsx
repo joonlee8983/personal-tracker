@@ -1,9 +1,8 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/components/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { DeviceCodeGenerator } from "@/components/device-code-generator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -11,16 +10,16 @@ import { ArrowLeft, User } from "lucide-react";
 import Link from "next/link";
 
 export default function SettingsPage() {
-  const { data: session, status } = useSession();
+  const { user, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (!isLoading && !user) {
       router.push("/auth/signin");
     }
-  }, [status, router]);
+  }, [isLoading, user, router]);
 
-  if (status === "loading") {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -28,7 +27,7 @@ export default function SettingsPage() {
     );
   }
 
-  if (!session) {
+  if (!user) {
     return null;
   }
 
@@ -58,21 +57,14 @@ export default function SettingsPage() {
           <CardContent>
             <div className="space-y-2">
               <div>
-                <span className="text-sm text-muted-foreground">Name:</span>
-                <p className="font-medium">{session.user?.name || "Not set"}</p>
-              </div>
-              <div>
                 <span className="text-sm text-muted-foreground">Email:</span>
-                <p className="font-medium">{session.user?.email}</p>
+                <p className="font-medium">{user.email}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Separator />
-
-        {/* Mobile Pairing */}
-        <DeviceCodeGenerator />
       </main>
     </div>
   );

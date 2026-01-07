@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMobileAuth } from "@/lib/mobile-auth";
+import { getAuthenticatedUser } from "@/lib/auth";
 import { getUserPushTokens, sendPushNotifications } from "@/lib/push";
 
 /**
  * POST /api/push/test
  * 
  * Send a test push notification to the authenticated user.
- * Requires mobile bearer token authentication.
+ * Requires bearer token authentication.
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await verifyMobileAuth(request);
-    if (!auth) {
+    const userId = await getAuthenticatedUser(request);
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const tokens = await getUserPushTokens(auth.userId);
+    const tokens = await getUserPushTokens(userId);
     
     if (tokens.length === 0) {
       return NextResponse.json(

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/components/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { Item } from "@prisma/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,10 +33,9 @@ import {
   LogOut,
   Sparkles,
 } from "lucide-react";
-import { signOut } from "next-auth/react";
 
 export default function HomePage() {
-  const { data: session, status } = useSession();
+  const { user, isLoading: authLoading, signOut } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -46,10 +45,10 @@ export default function HomePage() {
 
   // Redirect to sign in if not authenticated
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (!authLoading && !user) {
       router.push("/auth/signin");
     }
-  }, [status, router]);
+  }, [authLoading, user, router]);
 
   // Fetch items
   const fetchItems = useCallback(async () => {
@@ -72,10 +71,10 @@ export default function HomePage() {
   }, [toast]);
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (user) {
       fetchItems();
     }
-  }, [status, fetchItems]);
+  }, [user, fetchItems]);
 
   // Handle text submission
   const handleTextSubmit = async (text: string) => {
@@ -225,7 +224,7 @@ export default function HomePage() {
   // Calculate inbox count
   const inboxCount = items.filter((item) => item.needsReview).length;
 
-  if (status === "loading") {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -233,7 +232,7 @@ export default function HomePage() {
     );
   }
 
-  if (!session) {
+  if (!user) {
     return null;
   }
 
@@ -253,18 +252,17 @@ export default function HomePage() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={session.user?.image || undefined} />
                   <AvatarFallback>
-                    {session.user?.name?.[0]?.toUpperCase() || "U"}
+                    {user.email?.[0]?.toUpperCase() || "U"}
                   </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <div className="px-2 py-1.5 text-sm">
-                <p className="font-medium">{session.user?.name}</p>
+                <p className="font-medium">{user.email?.split("@")[0]}</p>
                 <p className="text-muted-foreground text-xs">
-                  {session.user?.email}
+                  {user.email}
                 </p>
               </div>
               <Separator className="my-1" />

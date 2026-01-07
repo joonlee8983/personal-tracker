@@ -17,8 +17,8 @@ function RootLayoutNav() {
     const inAuthGroup = segments[0] === "auth";
 
     if (!isAuthenticated && !inAuthGroup) {
-      // Redirect to pair screen if not authenticated
-      router.replace("/auth/pair");
+      // Redirect to login screen if not authenticated
+      router.replace("/auth/login");
     } else if (isAuthenticated && inAuthGroup) {
       // Redirect to home if authenticated
       router.replace("/(tabs)");
@@ -38,7 +38,7 @@ function RootLayoutNav() {
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="auth/pair" />
+        <Stack.Screen name="auth/login" />
         <Stack.Screen
           name="capture/text"
           options={{

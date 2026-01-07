@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { getAuthenticatedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { processIngest } from "@/lib/agent";
 import { TextIngestRequestSchema } from "@/types";
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await requireAuth();
+    const userId = await getAuthenticatedUser(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const body = await request.json();
     const { text } = TextIngestRequestSchema.parse(body);

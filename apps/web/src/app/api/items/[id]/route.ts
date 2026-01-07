@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { getAuthenticatedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ItemUpdateSchema } from "@/types";
 
@@ -9,7 +9,11 @@ interface RouteParams {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth();
+    const userId = await getAuthenticatedUser(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
 
     const item = await prisma.item.findFirst({
@@ -23,11 +27,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ item });
   } catch (error) {
     console.error("Get item error:", error);
-
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     return NextResponse.json(
       { error: "Failed to fetch item" },
       { status: 500 }
@@ -37,20 +36,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth();
-    const { id } = await params;
+    const userId = await getAuthenticatedUser(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
+    const { id } = await params;
     const body = await request.json();
     const updates = ItemUpdateSchema.parse(body);
-
-    // Verify ownership
-    const existing = await prisma.item.findFirst({
-      where: { id, userId },
-    });
-
-    if (!existing) {
-      return NextResponse.json({ error: "Item not found" }, { status: 404 });
-    }
 
     // Build update data
     const updateData: Parameters<typeof prisma.item.update>[0]["data"] = {};
@@ -67,19 +60,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateData.dueAt = updates.dueAt ? new Date(updates.dueAt) : null;
     }
 
-    const item = await prisma.item.update({
-      where: { id },
+    // Use updateMany to enforce userId check at database level
+    const result = await prisma.item.updateMany({
+      where: { id, userId },
       data: updateData,
     });
+
+    if (result.count === 0) {
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
+    }
+
+    // Fetch updated item to return
+    const item = await prisma.item.findUnique({ where: { id } });
 
     return NextResponse.json({ item });
   } catch (error) {
     console.error("Update item error:", error);
-
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     return NextResponse.json(
       { error: "Failed to update item" },
       { status: 500 }
@@ -89,34 +85,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth();
+    const userId = await getAuthenticatedUser(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
 
-    // Verify ownership
-    const existing = await prisma.item.findFirst({
+    // Use deleteMany to enforce userId check at database level
+    const result = await prisma.item.deleteMany({
       where: { id, userId },
     });
 
-    if (!existing) {
+    if (result.count === 0) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
-
-    await prisma.item.delete({
-      where: { id },
-    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Delete item error:", error);
-
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     return NextResponse.json(
       { error: "Failed to delete item" },
       { status: 500 }
     );
   }
 }
-

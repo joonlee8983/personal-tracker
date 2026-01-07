@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyMobileAuth } from "@/lib/mobile-auth";
+import { getAuthenticatedUser } from "@/lib/auth";
 import { unregisterPushToken } from "@/lib/push";
 
 const UnregisterSchema = z.object({
@@ -11,19 +11,19 @@ const UnregisterSchema = z.object({
  * POST /api/push/unregister
  * 
  * Unregister an Expo push token.
- * Requires mobile bearer token authentication.
+ * Requires bearer token authentication.
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await verifyMobileAuth(request);
-    if (!auth) {
+    const userId = await getAuthenticatedUser(request);
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = await request.json();
     const { expoPushToken } = UnregisterSchema.parse(body);
 
-    await unregisterPushToken(auth.userId, expoPushToken);
+    await unregisterPushToken(userId, expoPushToken);
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { getAuthenticatedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ItemFilterSchema } from "@/types";
 import { Prisma } from "@prisma/client";
@@ -7,7 +7,10 @@ import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await requireAuth();
+    const userId = await getAuthenticatedUser(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { searchParams } = new URL(request.url);
     const params = {

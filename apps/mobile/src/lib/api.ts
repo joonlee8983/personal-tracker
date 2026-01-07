@@ -1,228 +1,125 @@
-import type { Item, ApiResponse, UserSettings } from "@todo/shared";
-import { getAuthHeader, refreshAccessToken, logout } from "./auth";
-import { offlineQueue } from "./storage";
+import { supabase } from "./supabase";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3000";
 
-interface RequestOptions {
-  method?: string;
-  body?: unknown;
-  isFormData?: boolean;
+interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
 }
 
-/**
- * Make an authenticated API request with auto-refresh on 401
- */
-async function apiRequest<T>(
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.access_token) {
+    return {};
+  }
+  
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+  };
+}
+
+export async function apiRequest<T>(
   endpoint: string,
   options: RequestOptions = {}
-): Promise<ApiResponse<T>> {
-  const { method = "GET", body, isFormData = false, skipAuth = false } = options;
+): Promise<T> {
+  const { skipAuth = false, ...fetchOptions } = options;
+  
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((fetchOptions.headers as Record<string, string>) || {}),
+  };
 
-  try {
-    const headers: Record<string, string> = {};
+  if (!skipAuth) {
+    const authHeaders = await getAuthHeaders();
+    Object.assign(headers, authHeaders);
+  }
 
-    if (!skipAuth) {
-      const authHeader = await getAuthHeader();
-      if (!authHeader) {
-        return { success: false, error: "Not authenticated" };
-      }
-      headers.Authorization = authHeader.Authorization;
-    }
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...fetchOptions,
+    headers,
+  });
 
-    if (!isFormData && body) {
-      headers["Content-Type"] = "application/json";
-    }
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Request failed" }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method,
-      headers,
-      body: isFormData ? (body as FormData) : body ? JSON.stringify(body) : undefined,
+  return response.json();
+}
+
+// Items API
+export const itemsApi = {
+  list: (params?: { status?: string; type?: string; search?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.type) searchParams.set("type", params.type);
+    if (params?.search) searchParams.set("search", params.search);
+    const query = searchParams.toString();
+    return apiRequest<{ items: unknown[] }>(`/api/items${query ? `?${query}` : ""}`);
+  },
+
+  get: (id: string) => apiRequest<{ item: unknown }>(`/api/items/${id}`),
+
+  update: (id: string, data: Record<string, unknown>) =>
+    apiRequest<{ item: unknown }>(`/api/items/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    apiRequest<{ success: boolean }>(`/api/items/${id}`, {
+      method: "DELETE",
+    }),
+};
+
+// Ingest API
+export const ingestApi = {
+  text: (text: string) =>
+    apiRequest<{ item: unknown; classification: unknown }>("/api/ingest/text", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+
+  voice: async (audioUri: string, filename: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    const formData = new FormData();
+    formData.append("audio", {
+      uri: audioUri,
+      type: "audio/m4a",
+      name: filename,
+    } as unknown as Blob);
+
+    const response = await fetch(`${API_BASE}/api/ingest/voice`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session?.access_token || ""}`,
+      },
+      body: formData,
     });
-
-    // Handle 401 - try to refresh and retry once
-    if (response.status === 401 && !skipAuth) {
-      const refreshed = await refreshAccessToken();
-      if (refreshed) {
-        // Retry the request
-        const newAuthHeader = await getAuthHeader();
-        if (newAuthHeader) {
-          headers.Authorization = newAuthHeader.Authorization;
-          const retryResponse = await fetch(`${API_BASE}${endpoint}`, {
-            method,
-            headers,
-            body: isFormData ? (body as FormData) : body ? JSON.stringify(body) : undefined,
-          });
-
-          if (retryResponse.ok) {
-            const data = await retryResponse.json();
-            return { success: true, data };
-          }
-        }
-      }
-
-      // Refresh failed, logout
-      await logout();
-      return { success: false, error: "Session expired" };
-    }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return { success: false, error: errorData.error || `Error ${response.status}` };
+      const error = await response.json().catch(() => ({ error: "Upload failed" }));
+      throw new Error(error.error || "Failed to upload voice memo");
     }
 
-    const data = await response.json();
-    return { success: true, data };
-  } catch (error) {
-    console.error(`API request error (${endpoint}):`, error);
+    return response.json();
+  },
+};
 
-    // Queue for offline retry if it's a mutation
-    if (method !== "GET" && !skipAuth) {
-      await offlineQueue.add({ endpoint, method, body });
-    }
+// Push notifications API
+export const pushApi = {
+  register: (token: string, platform: string, deviceName?: string) =>
+    apiRequest("/api/push/register", {
+      method: "POST",
+      body: JSON.stringify({ expoPushToken: token, platform, deviceName }),
+    }),
 
-    return { success: false, error: "Network error" };
-  }
-}
+  unregister: (token: string) =>
+    apiRequest("/api/push/unregister", {
+      method: "POST",
+      body: JSON.stringify({ expoPushToken: token }),
+    }),
 
-// ============ Items API ============
-
-export interface ItemsFilter {
-  type?: string;
-  status?: string;
-  needsReview?: boolean;
-  dueFrom?: string;
-  dueTo?: string;
-  search?: string;
-  priority?: string;
-}
-
-export async function fetchItems(filters?: ItemsFilter): Promise<ApiResponse<{ items: Item[] }>> {
-  const params = new URLSearchParams();
-  if (filters) {
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined) {
-        params.append(key, String(value));
-      }
-    });
-  }
-  const query = params.toString();
-  return apiRequest(`/api/mobile/items${query ? `?${query}` : ""}`);
-}
-
-export async function fetchItem(id: string): Promise<ApiResponse<{ item: Item }>> {
-  return apiRequest(`/api/mobile/items/${id}`);
-}
-
-export async function updateItem(
-  id: string,
-  updates: Partial<Item>
-): Promise<ApiResponse<{ item: Item }>> {
-  return apiRequest(`/api/mobile/items/${id}`, {
-    method: "PATCH",
-    body: updates,
-  });
-}
-
-export async function deleteItem(id: string): Promise<ApiResponse<{ success: boolean }>> {
-  return apiRequest(`/api/mobile/items/${id}`, {
-    method: "DELETE",
-  });
-}
-
-// ============ Ingest API ============
-
-export async function ingestText(
-  text: string
-): Promise<ApiResponse<{ item: Item; needsReview: boolean }>> {
-  return apiRequest("/api/mobile/ingest/text", {
-    method: "POST",
-    body: { text },
-  });
-}
-
-export async function ingestVoice(
-  audioUri: string,
-  mimeType: string
-): Promise<ApiResponse<{ item: Item; transcription: string; needsReview: boolean }>> {
-  const formData = new FormData();
-
-  // @ts-expect-error - React Native FormData accepts this format
-  formData.append("audio", {
-    uri: audioUri,
-    type: mimeType,
-    name: `recording.${mimeType.split("/")[1] || "m4a"}`,
-  });
-
-  return apiRequest("/api/mobile/ingest/voice", {
-    method: "POST",
-    body: formData,
-    isFormData: true,
-  });
-}
-
-// ============ Settings API ============
-
-export async function fetchSettings(): Promise<ApiResponse<{ settings: UserSettings }>> {
-  return apiRequest("/api/mobile/settings");
-}
-
-export async function updateSettings(
-  updates: Partial<UserSettings>
-): Promise<ApiResponse<{ settings: UserSettings }>> {
-  return apiRequest("/api/mobile/settings", {
-    method: "PATCH",
-    body: updates,
-  });
-}
-
-// ============ Push API ============
-
-export async function registerPushToken(
-  expoPushToken: string,
-  platform: "ios" | "android",
-  deviceName?: string
-): Promise<ApiResponse<{ success: boolean }>> {
-  return apiRequest("/api/push/register", {
-    method: "POST",
-    body: { expoPushToken, platform, deviceName },
-  });
-}
-
-export async function unregisterPushToken(
-  expoPushToken: string
-): Promise<ApiResponse<{ success: boolean }>> {
-  return apiRequest("/api/push/unregister", {
-    method: "POST",
-    body: { expoPushToken },
-  });
-}
-
-export async function testPushNotification(): Promise<ApiResponse<{ success: boolean }>> {
-  return apiRequest("/api/push/test", {
-    method: "POST",
-  });
-}
-
-// ============ Offline Queue Processing ============
-
-export async function processOfflineQueue(): Promise<void> {
-  const queue = await offlineQueue.getAll();
-
-  for (const request of queue) {
-    try {
-      const response = await apiRequest(request.endpoint, {
-        method: request.method,
-        body: request.body,
-      });
-
-      if (response.success) {
-        await offlineQueue.remove(request.id);
-      }
-    } catch {
-      // Keep in queue for next retry
-    }
-  }
-}
-
+  test: () => apiRequest("/api/push/test", { method: "POST" }),
+};

@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PushTokenRegisterSchema } from "@todo/shared";
-import { verifyMobileAuth } from "@/lib/mobile-auth";
+import { getAuthenticatedUser } from "@/lib/auth";
 import { registerPushToken } from "@/lib/push";
 
 /**
  * POST /api/push/register
  * 
  * Register an Expo push token for the authenticated user.
- * Requires mobile bearer token authentication.
+ * Requires bearer token authentication.
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await verifyMobileAuth(request);
-    if (!auth) {
+    const userId = await getAuthenticatedUser(request);
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -20,11 +20,10 @@ export async function POST(request: NextRequest) {
     const { expoPushToken, platform, deviceName } = PushTokenRegisterSchema.parse(body);
 
     await registerPushToken(
-      auth.userId,
+      userId,
       expoPushToken,
       platform,
-      deviceName,
-      auth.deviceId
+      deviceName
     );
 
     return NextResponse.json({

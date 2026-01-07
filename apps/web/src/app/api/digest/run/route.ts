@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getAuthenticatedUser } from "@/lib/auth";
 import { runDigestForUser, runDigestForAllUsers } from "@/lib/digest";
 
 /**
@@ -29,15 +29,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Otherwise, run for authenticated user
-    const session = await getSession();
-    if (!session?.user?.id) {
+    const userId = await getAuthenticatedUser(request);
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = await request.json().catch(() => ({}));
     const sendEmail = body.sendEmail !== false;
 
-    const result = await runDigestForUser(session.user.id, sendEmail);
+    const result = await runDigestForUser(userId, sendEmail);
     
     return NextResponse.json({
       success: true,
