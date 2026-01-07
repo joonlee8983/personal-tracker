@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ export default function SearchScreen() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const router = useRouter();
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { items, isLoading, error, refetch, markDone, markActive, removeItem } =
     useItems({
@@ -25,15 +26,29 @@ export default function SearchScreen() {
       enabled: debouncedQuery.length > 0,
     });
 
-  // Simple debounce
-  const handleQueryChange = useCallback((text: string) => {
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Debounced search handler
+  const handleQueryChange = (text: string) => {
     setQuery(text);
-    // Debounce the search
-    const timer = setTimeout(() => {
+    
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    // Set new debounce timer
+    debounceTimerRef.current = setTimeout(() => {
       setDebouncedQuery(text);
     }, 300);
-    return () => clearTimeout(timer);
-  }, []);
+  };
 
   const handleToggleDone = (id: string, newStatus: string) => {
     if (newStatus === "done") {

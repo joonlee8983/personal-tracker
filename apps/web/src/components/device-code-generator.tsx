@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Smartphone, Copy, Check, RefreshCw, Loader2 } from "lucide-react";
@@ -163,7 +163,7 @@ function CountdownTimer({
     return Math.max(0, Math.floor(diff / 1000));
   });
 
-  useState(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       const diff = expiresAt.getTime() - Date.now();
       const seconds = Math.max(0, Math.floor(diff / 1000));
@@ -176,7 +176,7 @@ function CountdownTimer({
     }, 1000);
 
     return () => clearInterval(interval);
-  });
+  }, [expiresAt, onExpire]);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;

@@ -189,7 +189,8 @@ function isTimeToSend(
   try {
     const now = new Date();
     const userNow = toZonedTime(now, timezone);
-    const currentHour = parseInt(format(userNow, "HH", { timeZone: timezone }));
+    // toZonedTime already converts to the timezone, so format without timeZone option
+    const currentHour = parseInt(format(userNow, "HH"));
     const [preferredHour] = preferredTime.split(":").map(Number);
 
     // Check if current hour matches preferred hour
@@ -200,8 +201,8 @@ function isTimeToSend(
     // Check if already sent today
     if (lastSentAt) {
       const lastSentLocal = toZonedTime(lastSentAt, timezone);
-      const lastSentDate = format(lastSentLocal, "yyyy-MM-dd", { timeZone: timezone });
-      const todayDate = format(userNow, "yyyy-MM-dd", { timeZone: timezone });
+      const lastSentDate = format(lastSentLocal, "yyyy-MM-dd");
+      const todayDate = format(userNow, "yyyy-MM-dd");
 
       if (lastSentDate === todayDate) {
         return false; // Already sent today
