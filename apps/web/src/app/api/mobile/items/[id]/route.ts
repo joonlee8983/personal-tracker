@@ -51,6 +51,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json();
     const updates = ItemUpdateSchema.parse(body);
 
+    // Verify ownership
+    const existing = await prisma.item.findFirst({
+      where: { id, userId: auth.userId },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
+    }
+
     // Build update data
     const updateData: Parameters<typeof prisma.item.update>[0]["data"] = {};
 
@@ -93,18 +102,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    // Verify ownership
-    const existing = await prisma.item.findFirst({
+    // Delete with userId check enforced at database level
+    const result = await prisma.item.deleteMany({
       where: { id, userId: auth.userId },
     });
 
-    if (!existing) {
+    if (result.count === 0) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
-
-    await prisma.item.delete({
-      where: { id },
-    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
