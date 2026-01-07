@@ -1,18 +1,19 @@
 # dependencies
-/node_modules
-/.pnp
+node_modules/
+.pnp
 .pnp.js
 .yarn/install-state.gz
 
 # testing
-/coverage
+coverage/
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build/
+dist/
 
 # misc
 .DS_Store
@@ -22,6 +23,7 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
 # local env files
 .env*.local
@@ -37,3 +39,34 @@ next-env.d.ts
 # prisma
 prisma/migrations/**/migration_lock.toml
 
+# turbo
+.turbo/
+
+# expo
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# native (React Native)
+*.hbc
+
+# metro
+.metro-health-check*
+
+# iOS
+ios/Pods/
+ios/build/
+*.xcworkspace
+!*.xcworkspace/contents.xcworkspacedata
+*.xcuserdata
+
+# Android
+android/app/build/
+android/build/
+*.apk
+*.aab

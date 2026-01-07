@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { Resend } from "resend";
-import type { DigestData, DigestItem } from "@/types";
+import type { DigestData, DigestItem } from "@todo/shared";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 

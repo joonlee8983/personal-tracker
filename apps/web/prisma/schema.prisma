@@ -45,6 +45,10 @@ model User {
   sessions      Session[]
   items         Item[]
   digestLogs    DigestLog[]
+  deviceCodes   DeviceCode[]
+  refreshTokens RefreshToken[]
+  pushTokens    DevicePushToken[]
+  settings      UserSettings?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -55,6 +59,64 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// Mobile Auth models
+model DeviceCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @unique  // SHA-256 hash of the code
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique  // SHA-256 hash of the refresh token
+  deviceId    String    // Unique identifier for the device
+  deviceName  String?   // Human-readable device name
+  expiresAt   DateTime
+  lastUsedAt  DateTime  @default(now())
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([deviceId])
+}
+
+model DevicePushToken {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expoPushToken String   @unique
+  platform      String   // "ios" | "android"
+  deviceName    String?
+  deviceId      String?  // Links to RefreshToken.deviceId
+  isEnabled     Boolean  @default(true)
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([isEnabled])
+}
+
+model UserSettings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyDigestEnabled Boolean  @default(true)
+  dailyDigestTime    String   @default("08:00")  // HH:MM format
+  timezone           String   @default("America/Los_Angeles")
+  lastDigestSentAt   DateTime?  // Tracks when last digest was sent to avoid duplicates
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 // Application models
@@ -120,7 +182,8 @@ model DigestLog {
 
   date          DateTime @db.Date  // The date of the digest
   sentAt        DateTime?
-  sentVia       String?  // "email" | "in_app"
+  sentVia       String?  // "email" | "in_app" | "push"
+  pushSentAt    DateTime?  // When push notification was sent
   content       String   @db.Text  // Rendered digest content (markdown or HTML)
   itemsIncluded String[] // Array of item IDs included in digest
 
@@ -129,4 +192,3 @@ model DigestLog {
   @@unique([userId, date])
   @@index([userId, date])
 }
-
