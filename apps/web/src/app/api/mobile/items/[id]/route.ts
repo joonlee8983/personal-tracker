@@ -51,15 +51,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json();
     const updates = ItemUpdateSchema.parse(body);
 
-    // Verify ownership
-    const existing = await prisma.item.findFirst({
-      where: { id, userId: auth.userId },
-    });
-
-    if (!existing) {
-      return NextResponse.json({ error: "Item not found" }, { status: 404 });
-    }
-
     // Build update data
     const updateData: Parameters<typeof prisma.item.update>[0]["data"] = {};
 
@@ -124,4 +115,3 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     );
   }
 }
-
