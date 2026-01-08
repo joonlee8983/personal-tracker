@@ -7,7 +7,14 @@ import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET(request: NextRequest) {
   try {
+    // Debug logging
+    const authHeader = request.headers.get("authorization");
+    console.log("[Items API] Auth header present:", !!authHeader);
+    console.log("[Items API] Auth header prefix:", authHeader?.substring(0, 20));
+    
     const userId = await getAuthenticatedUser(request);
+    console.log("[Items API] User ID:", userId);
+    
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
