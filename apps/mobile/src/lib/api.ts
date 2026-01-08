@@ -1,15 +1,30 @@
 import { supabase } from "./supabase";
+import type { Item } from "@todo/shared";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3000";
 
-interface RequestOptions extends RequestInit {
-  skipAuth?: boolean;
+// Types
+export interface ItemsFilter {
+  status?: string;
+  type?: string;
+  search?: string;
+  needsReview?: boolean;
+  dueFrom?: string;
+  dueTo?: string;
 }
 
+export interface ApiResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+// Auth helper
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
   
   if (!session?.access_token) {
+    console.log("[API] No access token available");
     return {};
   }
   
@@ -18,69 +33,84 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
-export async function apiRequest<T>(
+// Generic API request
+async function apiRequest<T>(
   endpoint: string,
-  options: RequestOptions = {}
-): Promise<T> {
-  const { skipAuth = false, ...fetchOptions } = options;
-  
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...((fetchOptions.headers as Record<string, string>) || {}),
-  };
-
-  if (!skipAuth) {
+  options: RequestInit = {}
+): Promise<ApiResult<T>> {
+  try {
     const authHeaders = await getAuthHeaders();
-    Object.assign(headers, authHeaders);
+    
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...authHeaders,
+      ...((options.headers as Record<string, string>) || {}),
+    };
+
+    console.log(`[API] ${options.method || "GET"} ${API_BASE}${endpoint}`);
+    
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    console.log(`[API] Response status: ${response.status}`);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Request failed" }));
+      console.log(`[API] Error:`, error);
+      return { success: false, error: error.error || `HTTP ${response.status}` };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error("[API] Network error:", error);
+    return { success: false, error: "Network error. Please try again." };
   }
-
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...fetchOptions,
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(error.error || `HTTP ${response.status}`);
-  }
-
-  return response.json();
 }
 
 // Items API
-export const itemsApi = {
-  list: (params?: { status?: string; type?: string; search?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.status) searchParams.set("status", params.status);
-    if (params?.type) searchParams.set("type", params.type);
-    if (params?.search) searchParams.set("search", params.search);
-    const query = searchParams.toString();
-    return apiRequest<{ items: unknown[] }>(`/api/items${query ? `?${query}` : ""}`);
-  },
+export async function fetchItems(filters?: ItemsFilter): Promise<ApiResult<{ items: Item[] }>> {
+  const searchParams = new URLSearchParams();
+  if (filters?.status) searchParams.set("status", filters.status);
+  if (filters?.type) searchParams.set("type", filters.type);
+  if (filters?.search) searchParams.set("search", filters.search);
+  if (filters?.needsReview !== undefined) searchParams.set("needsReview", String(filters.needsReview));
+  if (filters?.dueFrom) searchParams.set("dueFrom", filters.dueFrom);
+  if (filters?.dueTo) searchParams.set("dueTo", filters.dueTo);
+  
+  const query = searchParams.toString();
+  return apiRequest<{ items: Item[] }>(`/api/items${query ? `?${query}` : ""}`);
+}
 
-  get: (id: string) => apiRequest<{ item: unknown }>(`/api/items/${id}`),
+export async function getItem(id: string): Promise<ApiResult<{ item: Item }>> {
+  return apiRequest<{ item: Item }>(`/api/items/${id}`);
+}
 
-  update: (id: string, data: Record<string, unknown>) =>
-    apiRequest<{ item: unknown }>(`/api/items/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    }),
+export async function updateItem(id: string, data: Partial<Item>): Promise<ApiResult<{ item: Item }>> {
+  return apiRequest<{ item: Item }>(`/api/items/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
 
-  delete: (id: string) =>
-    apiRequest<{ success: boolean }>(`/api/items/${id}`, {
-      method: "DELETE",
-    }),
-};
+export async function deleteItem(id: string): Promise<ApiResult<{ success: boolean }>> {
+  return apiRequest<{ success: boolean }>(`/api/items/${id}`, {
+    method: "DELETE",
+  });
+}
 
 // Ingest API
-export const ingestApi = {
-  text: (text: string) =>
-    apiRequest<{ item: unknown; classification: unknown }>("/api/ingest/text", {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    }),
+export async function ingestText(text: string): Promise<ApiResult<{ item: Item }>> {
+  return apiRequest<{ item: Item }>("/api/ingest/text", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
 
-  voice: async (audioUri: string, filename: string) => {
+export async function ingestVoice(audioUri: string, filename: string): Promise<ApiResult<{ item: Item }>> {
+  try {
     const { data: { session } } = await supabase.auth.getSession();
     
     const formData = new FormData();
@@ -100,26 +130,73 @@ export const ingestApi = {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: "Upload failed" }));
-      throw new Error(error.error || "Failed to upload voice memo");
+      return { success: false, error: error.error || "Failed to upload voice memo" };
     }
 
-    return response.json();
-  },
-};
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error("[API] Voice upload error:", error);
+    return { success: false, error: "Network error. Please try again." };
+  }
+}
 
 // Push notifications API
+export async function registerPushToken(
+  token: string,
+  platform: string,
+  deviceName?: string
+): Promise<ApiResult<void>> {
+  return apiRequest("/api/push/register", {
+    method: "POST",
+    body: JSON.stringify({ expoPushToken: token, platform, deviceName }),
+  });
+}
+
+export async function unregisterPushToken(token: string): Promise<ApiResult<void>> {
+  return apiRequest("/api/push/unregister", {
+    method: "POST",
+    body: JSON.stringify({ expoPushToken: token }),
+  });
+}
+
+export async function testPush(): Promise<ApiResult<void>> {
+  return apiRequest("/api/push/test", { method: "POST" });
+}
+
+// Alias for getItem (for backward compatibility)
+export const fetchItem = getItem;
+
+// Settings API
+export async function fetchSettings(): Promise<ApiResult<{ settings: any }>> {
+  return apiRequest("/api/settings");
+}
+
+export async function updateSettings(data: Record<string, any>): Promise<ApiResult<{ settings: any }>> {
+  return apiRequest("/api/settings", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// Alias for testPush
+export const testPushNotification = testPush;
+
+// Legacy exports for backward compatibility
+export const itemsApi = {
+  list: fetchItems,
+  get: getItem,
+  update: updateItem,
+  delete: deleteItem,
+};
+
+export const ingestApi = {
+  text: ingestText,
+  voice: ingestVoice,
+};
+
 export const pushApi = {
-  register: (token: string, platform: string, deviceName?: string) =>
-    apiRequest("/api/push/register", {
-      method: "POST",
-      body: JSON.stringify({ expoPushToken: token, platform, deviceName }),
-    }),
-
-  unregister: (token: string) =>
-    apiRequest("/api/push/unregister", {
-      method: "POST",
-      body: JSON.stringify({ expoPushToken: token }),
-    }),
-
-  test: () => apiRequest("/api/push/test", { method: "POST" }),
+  register: registerPushToken,
+  unregister: unregisterPushToken,
+  test: testPush,
 };

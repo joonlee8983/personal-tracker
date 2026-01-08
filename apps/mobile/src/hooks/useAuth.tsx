@@ -10,6 +10,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  logout: () => Promise<void>; // Alias for signOut
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -69,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signUp,
         signOut,
+        logout: signOut, // Alias for signOut
       }}
     >
       {children}
