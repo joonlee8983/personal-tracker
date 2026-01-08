@@ -8,119 +8,7 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// NextAuth models
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String? @db.Text
-  session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  items         Item[]
-  digestLogs    DigestLog[]
-  deviceCodes   DeviceCode[]
-  refreshTokens RefreshToken[]
-  pushTokens    DevicePushToken[]
-  settings      UserSettings?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
-
-// Mobile Auth models
-model DeviceCode {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeHash  String    @unique  // SHA-256 hash of the code
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@index([userId])
-  @@index([expiresAt])
-}
-
-model RefreshToken {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash   String    @unique  // SHA-256 hash of the refresh token
-  deviceId    String    // Unique identifier for the device
-  deviceName  String?   // Human-readable device name
-  expiresAt   DateTime
-  lastUsedAt  DateTime  @default(now())
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
-
-  @@index([userId])
-  @@index([deviceId])
-}
-
-model DevicePushToken {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expoPushToken String   @unique
-  platform      String   // "ios" | "android"
-  deviceName    String?
-  deviceId      String?  // Links to RefreshToken.deviceId
-  isEnabled     Boolean  @default(true)
-  lastSeenAt    DateTime @default(now())
-  createdAt     DateTime @default(now())
-
-  @@index([userId])
-  @@index([isEnabled])
-}
-
-model UserSettings {
-  id                 String   @id @default(cuid())
-  userId             String   @unique
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dailyDigestEnabled Boolean  @default(true)
-  dailyDigestTime    String   @default("08:00")  // HH:MM format
-  timezone           String   @default("America/Los_Angeles")
-  lastDigestSentAt   DateTime?  // Tracks when last digest was sent to avoid duplicates
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-}
-
-// Application models
+// Enums
 enum ItemType {
   todo
   reminder
@@ -146,27 +34,23 @@ enum SourceType {
   telegram
 }
 
+// Items - main tasks/notes/reminders
 model Item {
   id              String     @id @default(cuid())
-  userId          String
-  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  userId          String     // Supabase auth.users UUID
   type            ItemType
   title           String
   details         String?    @db.Text
   status          ItemStatus @default(active)
   dueAt           DateTime?
   priority        Priority?
-  tags            String[]
-
+  tags            String[]   @default([])
   sourceType      SourceType
-  sourceText      String     @db.Text  // Original text or transcription
-  sourceAudioUrl  String?    // URL to audio file if voice memo
-
+  sourceText      String     @db.Text
+  sourceAudioUrl  String?
   needsReview     Boolean    @default(false)
   agentConfidence Float?
-  agentRawJson    Json?      // Store raw agent response for debugging
-
+  agentRawJson    Json?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -174,22 +58,53 @@ model Item {
   @@index([userId, type])
   @@index([userId, dueAt])
   @@index([userId, needsReview])
+  @@map("Item")
 }
 
+// User Settings
+model UserSettings {
+  id                 String    @id @default(cuid())
+  userId             String    @unique // Supabase auth.users UUID
+  dailyDigestEnabled Boolean   @default(true)
+  dailyDigestTime    String    @default("08:00")
+  timezone           String    @default("America/Los_Angeles")
+  lastDigestSentAt   DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@map("UserSettings")
+}
+
+// Push notification tokens
+model DevicePushToken {
+  id            String   @id @default(cuid())
+  userId        String   // Supabase auth.users UUID
+  expoPushToken String   @unique
+  platform      String
+  deviceName    String?
+  deviceId      String?
+  isEnabled     Boolean  @default(true)
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([isEnabled])
+  @@map("DevicePushToken")
+}
+
+// Digest logs
 model DigestLog {
   id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  date          DateTime @db.Date  // The date of the digest
+  userId        String   // Supabase auth.users UUID
+  date          DateTime @db.Date
   sentAt        DateTime?
-  sentVia       String?  // "email" | "in_app" | "push"
-  pushSentAt    DateTime?  // When push notification was sent
-  content       String   @db.Text  // Rendered digest content (markdown or HTML)
-  itemsIncluded String[] // Array of item IDs included in digest
-
+  sentVia       String?
+  pushSentAt    DateTime?
+  content       String   @db.Text
+  itemsIncluded String[] @default([])
   createdAt     DateTime @default(now())
 
   @@unique([userId, date])
   @@index([userId, date])
+  @@map("DigestLog")
 }

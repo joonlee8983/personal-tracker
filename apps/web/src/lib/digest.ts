@@ -241,7 +241,7 @@ export function formatDigestHtml(data: DigestData): string {
 }
 
 /**
- * Send digest email
+ * Send digest email (requires user email from Supabase Auth)
  */
 export async function sendDigestEmail(
   userEmail: string,
@@ -268,14 +268,8 @@ export async function sendDigestEmail(
  * Run digest for a specific user
  */
 export async function runDigestForUser(
-  userId: string,
-  sendEmail: boolean = true
-): Promise<{ digestLog: { id: string }; emailSent: boolean }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { email: true },
-  });
-
+  userId: string
+): Promise<{ digestLog: { id: string } }> {
   const data = await generateDigestData(userId);
   const content = formatDigestContent(data);
   const itemsIncluded = [
@@ -284,75 +278,26 @@ export async function runDigestForUser(
     ...data.overdue.map((i) => i.id),
   ];
 
-  // Check for existing digest today
-  const existingDigest = await prisma.digestLog.findUnique({
+  // Create or update digest log
+  const digestLog = await prisma.digestLog.upsert({
     where: {
       userId_date: {
         userId,
         date: new Date(data.date),
       },
     },
+    create: {
+      userId,
+      date: new Date(data.date),
+      content,
+      itemsIncluded,
+      sentVia: "in_app",
+    },
+    update: {
+      content,
+      itemsIncluded,
+    },
   });
 
-  let emailSent = false;
-
-  if (sendEmail && user?.email && resend) {
-    try {
-      emailSent = await sendDigestEmail(user.email, data);
-    } catch (error) {
-      console.error("Failed to send digest email:", error);
-    }
-  }
-
-  // Create or update digest log
-  const digestLog = existingDigest
-    ? await prisma.digestLog.update({
-        where: { id: existingDigest.id },
-        data: {
-          content,
-          itemsIncluded,
-          sentAt: emailSent ? new Date() : existingDigest.sentAt,
-          sentVia: emailSent ? "email" : "in_app",
-        },
-      })
-    : await prisma.digestLog.create({
-        data: {
-          userId,
-          date: new Date(data.date),
-          content,
-          itemsIncluded,
-          sentAt: emailSent ? new Date() : null,
-          sentVia: emailSent ? "email" : "in_app",
-        },
-      });
-
-  return { digestLog: { id: digestLog.id }, emailSent };
+  return { digestLog: { id: digestLog.id } };
 }
-
-/**
- * Run digest for all users (called by cron)
- */
-export async function runDigestForAllUsers(): Promise<{
-  processed: number;
-  errors: number;
-}> {
-  const users = await prisma.user.findMany({
-    select: { id: true },
-  });
-
-  let processed = 0;
-  let errors = 0;
-
-  for (const user of users) {
-    try {
-      await runDigestForUser(user.id);
-      processed++;
-    } catch (error) {
-      console.error(`Failed to run digest for user ${user.id}:`, error);
-      errors++;
-    }
-  }
-
-  return { processed, errors };
-}
-

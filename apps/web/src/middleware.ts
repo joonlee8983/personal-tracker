@@ -34,13 +34,8 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Check if request has Bearer token (mobile app)
-  const hasAuthHeader = request.headers.get("authorization")?.startsWith("Bearer ");
-  
-  // API routes handle their own auth (support both cookies and Bearer tokens)
-  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
-  
-  // Protect web routes that require authentication (not API routes)
+  // Protect web routes that require authentication
+  // Note: API routes handle their own auth via Bearer tokens
   const protectedPaths = ["/", "/settings"];
   const isProtectedWebPath = protectedPaths.some(
     (path) => request.nextUrl.pathname === path

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { generateDigestData, formatDigestContent, sendDigestEmail } from "@/lib/digest";
+import { generateDigestData, formatDigestContent } from "@/lib/digest";
 import { sendDigestPush } from "@/lib/push";
 import { toZonedTime, format } from "date-fns-tz";
 
 /**
- * POST/GET /api/cron/daily-digest
+ * GET /api/cron/daily-digest
  * 
- * Hourly cron job to send daily digest notifications.
+ * Daily cron job to send digest notifications.
  * Checks each user's timezone and preferred time.
  * Requires CRON_SECRET for authentication.
  */
@@ -29,42 +29,27 @@ async function handleDigestCron(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  console.log("[Digest Cron] Starting hourly digest check...");
+  console.log("[Digest Cron] Starting digest check...");
 
   try {
-    // Get all users with digest enabled
-    const users = await prisma.user.findMany({
+    // Get all users with digest enabled from UserSettings
+    const usersWithSettings = await prisma.userSettings.findMany({
       where: {
-        settings: {
-          dailyDigestEnabled: true,
-        },
-      },
-      include: {
-        settings: true,
-        pushTokens: {
-          where: { isEnabled: true },
-          select: { expoPushToken: true },
-        },
+        dailyDigestEnabled: true,
       },
     });
 
-    console.log(`[Digest Cron] Found ${users.length} users with digest enabled`);
+    console.log(`[Digest Cron] Found ${usersWithSettings.length} users with digest enabled`);
 
     const results = {
-      checked: users.length,
+      checked: usersWithSettings.length,
       sent: 0,
       skipped: 0,
       errors: 0,
     };
 
-    for (const user of users) {
+    for (const settings of usersWithSettings) {
       try {
-        const settings = user.settings || {
-          dailyDigestTime: "08:00",
-          timezone: "America/Los_Angeles",
-          lastDigestSentAt: null,
-        };
-
         // Check if it's time to send for this user
         const shouldSend = isTimeToSend(
           settings.timezone,
@@ -77,31 +62,30 @@ async function handleDigestCron(request: NextRequest) {
           continue;
         }
 
-        console.log(`[Digest Cron] Sending digest to user ${user.id}`);
+        console.log(`[Digest Cron] Sending digest to user ${settings.userId}`);
 
         // Generate digest data
-        const digestData = await generateDigestData(user.id);
+        const digestData = await generateDigestData(settings.userId);
         const content = formatDigestContent(digestData);
 
         // Create summary for push notification
         const pushSummary = createPushSummary(digestData);
 
+        // Get user's push tokens
+        const pushTokens = await prisma.devicePushToken.findMany({
+          where: {
+            userId: settings.userId,
+            isEnabled: true,
+          },
+          select: { expoPushToken: true },
+        });
+
         // Track what was sent
         let pushSent = false;
-        let emailSent = false;
 
         // Send push notification if user has tokens
-        if (user.pushTokens.length > 0) {
-          pushSent = await sendDigestPush(user.id, pushSummary);
-        }
-
-        // Send email if user has email
-        if (user.email) {
-          try {
-            emailSent = await sendDigestEmail(user.email, digestData);
-          } catch (error) {
-            console.error(`[Digest Cron] Email failed for user ${user.id}:`, error);
-          }
+        if (pushTokens.length > 0) {
+          pushSent = await sendDigestPush(settings.userId, pushSummary);
         }
 
         // Store digest log
@@ -111,12 +95,12 @@ async function handleDigestCron(request: NextRequest) {
         await prisma.digestLog.upsert({
           where: {
             userId_date: {
-              userId: user.id,
+              userId: settings.userId,
               date: today,
             },
           },
           create: {
-            userId: user.id,
+            userId: settings.userId,
             date: today,
             content,
             itemsIncluded: [
@@ -124,7 +108,7 @@ async function handleDigestCron(request: NextRequest) {
               ...digestData.dueToday.map((i) => i.id),
               ...digestData.overdue.map((i) => i.id),
             ],
-            sentVia: pushSent ? "push" : emailSent ? "email" : "in_app",
+            sentVia: pushSent ? "push" : "in_app",
             sentAt: new Date(),
             pushSentAt: pushSent ? new Date() : null,
           },
@@ -135,30 +119,26 @@ async function handleDigestCron(request: NextRequest) {
               ...digestData.dueToday.map((i) => i.id),
               ...digestData.overdue.map((i) => i.id),
             ],
-            sentVia: pushSent ? "push" : emailSent ? "email" : "in_app",
+            sentVia: pushSent ? "push" : "in_app",
             sentAt: new Date(),
             pushSentAt: pushSent ? new Date() : null,
           },
         });
 
         // Update last sent timestamp
-        await prisma.userSettings.upsert({
-          where: { userId: user.id },
-          create: {
-            userId: user.id,
-            lastDigestSentAt: new Date(),
-          },
-          update: {
+        await prisma.userSettings.update({
+          where: { userId: settings.userId },
+          data: {
             lastDigestSentAt: new Date(),
           },
         });
 
         results.sent++;
         console.log(
-          `[Digest Cron] Sent to user ${user.id} - push: ${pushSent}, email: ${emailSent}`
+          `[Digest Cron] Sent to user ${settings.userId} - push: ${pushSent}`
         );
       } catch (error) {
-        console.error(`[Digest Cron] Error for user ${user.id}:`, error);
+        console.error(`[Digest Cron] Error for user ${settings.userId}:`, error);
         results.errors++;
       }
     }
@@ -189,7 +169,6 @@ function isTimeToSend(
   try {
     const now = new Date();
     const userNow = toZonedTime(now, timezone);
-    // toZonedTime already converts to the timezone, so format without timeZone option
     const currentHour = parseInt(format(userNow, "HH"));
     const [preferredHour] = preferredTime.split(":").map(Number);
 
@@ -248,4 +227,3 @@ function createPushSummary(data: {
 
   return parts.join(" • ");
 }
-
