@@ -9,14 +9,14 @@ A mobile-first personal task manager with AI-powered classification. Capture tas
 - 📱 **Native Mobile App** - iOS app built with Expo for the best mobile experience
 - 🔔 **Daily Digest Push** - Morning notifications with your tasks for the day
 - 📊 **Smart Views** - Inbox, Today, Buckets, and Search
-- 🔐 **Secure Auth** - Device pairing with JWT tokens (no WebView cookies)
+- 🔐 **Supabase Auth** - Secure email/password authentication
 
 ## Architecture
 
 ```
 personal-todo-app/
 ├── apps/
-│   ├── web/           # Next.js 15 (App Router) - Backend + Web UI
+│   ├── web/           # Next.js 16 (App Router) - Backend + Web UI
 │   └── mobile/        # Expo SDK 54 (React Native) - iOS App
 ├── packages/
 │   └── shared/        # Shared TypeScript types and Zod schemas
@@ -27,154 +27,176 @@ personal-todo-app/
 ## Tech Stack
 
 ### Backend (apps/web)
-- Next.js 15 (App Router)
-- PostgreSQL + Prisma ORM
-- NextAuth.js (web sessions)
-- JWT Bearer tokens (mobile auth)
+- Next.js 16 (App Router)
+- Supabase (Auth + PostgreSQL)
+- Prisma ORM
 - OpenAI GPT-4o-mini + Whisper
 - Expo Server SDK (push notifications)
-- Resend (optional email)
+- Resend (optional email digests)
 
 ### Mobile (apps/mobile)
 - Expo SDK 54 + Expo Router
 - React Native 0.81
+- Supabase Auth (native)
 - expo-notifications (push)
 - expo-audio (voice recording)
-- expo-secure-store (token storage)
 
 ---
 
 ## Prerequisites
 
-Before you begin, ensure you have:
-
 - **Node.js 18+** - [Download](https://nodejs.org/)
 - **pnpm 9+** - Install with `npm install -g pnpm`
-- **Docker** - [Download Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- **Expo Go app** - Install on your iPhone from the App Store
+- **Supabase Account** - [Sign up](https://supabase.com)
 - **OpenAI API Key** - [Get one here](https://platform.openai.com/api-keys)
+- **Apple Developer Account** (for iOS app) - [Enroll](https://developer.apple.com)
 
 ---
 
-## Quick Start
+## Quick Start (Local Development)
 
-### 1. Clone the Repository
+### 1. Clone and Install
 
 ```bash
 git clone <your-repo-url>
 cd personal-todo-app
-```
-
-### 2. Install Dependencies
-
-```bash
 pnpm install
 ```
 
-### 3. Set Up the Database
+### 2. Set Up Supabase
 
-Start PostgreSQL with Docker:
+1. Create a new project at [supabase.com](https://supabase.com)
+2. Go to **Project Settings → API** and copy:
+   - Project URL
+   - Anon public key
+   - Service role key
+3. Go to **Project Settings → Database** and copy the connection string
 
-```bash
-docker run --name todo-postgres -d \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=todo \
-  -p 5432:5432 \
-  postgres:15
-```
+### 3. Configure Environment Variables
 
-### 4. Configure Environment Variables
-
-Create the environment file for the web app:
-
-```bash
-cp apps/web/env.example apps/web/.env
-```
-
-Edit `apps/web/.env` and fill in your values:
+**Web App (`apps/web/.env`):**
 
 ```env
-# Database
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/todo?schema=public"
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 
-# NextAuth (generate with: openssl rand -base64 32)
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="your-random-secret-here"
-
-# Mobile Auth (generate with: openssl rand -base64 32)
-JWT_SECRET_MOBILE="another-random-secret-here"
-
-# Cron Secret (generate with: openssl rand -base64 32)
-CRON_SECRET="your-cron-secret-here"
+# Database (Supabase connection string)
+DATABASE_URL="postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres"
 
 # OpenAI (required for AI classification)
 OPENAI_API_KEY="sk-your-openai-api-key"
+
+# Cron Secret (generate with: openssl rand -base64 32)
+CRON_SECRET="your-cron-secret-here"
 
 # Optional: Email digests via Resend
 # RESEND_API_KEY=""
 # RESEND_FROM_EMAIL="noreply@yourdomain.com"
 ```
 
-### 5. Initialize the Database
+**Mobile App (`apps/mobile/.env`):**
+
+```env
+# Supabase
+EXPO_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+EXPO_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+
+# API URL (use local IP for development, Vercel URL for production)
+EXPO_PUBLIC_API_BASE_URL="http://YOUR_LOCAL_IP:3000"
+```
+
+### 4. Initialize Database
 
 ```bash
 cd apps/web
-pnpm db:push      # Push schema to database
+pnpm db:push      # Push Prisma schema to Supabase
 pnpm db:generate  # Generate Prisma client
 cd ../..
 ```
 
-### 6. Start the Web Backend
+### 5. Start Development
 
 ```bash
+# Terminal 1: Start web backend
 pnpm dev:web
-```
 
-The web app will be running at **http://localhost:3000**
-
-### 7. Configure the Mobile App
-
-Get your computer's local IP address:
-
-```bash
-# macOS
-ipconfig getifaddr en0
-
-# Linux
-hostname -I | awk '{print $1}'
-
-# Windows
-ipconfig | findstr /i "IPv4"
-```
-
-Create the mobile environment file:
-
-```bash
-echo "EXPO_PUBLIC_API_BASE_URL=http://YOUR_IP_ADDRESS:3000" > apps/mobile/.env
-```
-
-Replace `YOUR_IP_ADDRESS` with your actual IP (e.g., `192.168.1.100`).
-
-### 8. Start the Mobile App
-
-```bash
+# Terminal 2: Start mobile app
 cd apps/mobile
 npx expo start --tunnel
 ```
 
-Scan the QR code with your iPhone camera to open in Expo Go.
+Scan the QR code with your iPhone to open in Expo Go.
 
 ---
 
-## Pairing Your Mobile Device
+## Production Deployment
 
-1. Open **http://localhost:3000** in your browser
-2. Sign in with any email (demo authentication)
-3. Go to **Settings** (gear icon or `/settings`)
-4. Click **"Generate Device Code"**
-5. Enter the 6-character code in the mobile app
-6. You're connected!
+### Deploy Backend to Vercel
+
+1. Push code to GitHub
+2. Import repo in [Vercel](https://vercel.com)
+3. Configure:
+   - **Root Directory:** `apps/web`
+   - **Install Command:** `cd ../.. && pnpm install`
+4. Add environment variables:
+   | Variable | Value |
+   |----------|-------|
+   | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase URL |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your anon key |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Your service role key |
+   | `DATABASE_URL` | Supabase connection string |
+   | `OPENAI_API_KEY` | Your OpenAI key |
+   | `CRON_SECRET` | Random string for cron auth |
+5. Deploy!
+
+### Build iOS App with EAS
+
+```bash
+cd apps/mobile
+
+# Install EAS CLI
+npm install -g eas-cli
+
+# Login to Expo
+eas login
+
+# Initialize project (first time only)
+eas init
+
+# Build for internal testing (install on your device)
+eas build --platform ios --profile preview
+
+# Build for App Store (when ready)
+eas build --platform ios --profile production
+eas submit --platform ios
+```
+
+---
+
+## API Endpoints
+
+### Authentication (Supabase)
+- Sign up/in handled by Supabase client on web and mobile
+
+### Items API (Bearer token required)
+- `GET /api/items` - List items with filters
+- `GET /api/items/:id` - Get single item
+- `PATCH /api/items/:id` - Update item
+- `DELETE /api/items/:id` - Delete item
+
+### Ingest API (Bearer token required)
+- `POST /api/ingest/text` - Process text input
+- `POST /api/ingest/voice` - Process voice memo (multipart form)
+
+### Push Notifications (Bearer token required)
+- `POST /api/push/register` - Register Expo push token
+- `POST /api/push/unregister` - Remove push token
+- `POST /api/push/test` - Send test notification
+
+### Cron (requires CRON_SECRET)
+- `GET /api/cron/daily-digest?secret=CRON_SECRET` - Trigger daily digest
 
 ---
 
@@ -198,7 +220,6 @@ Scan the QR code with your iPhone camera to open in Expo Go.
 | `pnpm build` | Build for production |
 | `pnpm db:push` | Push Prisma schema to database |
 | `pnpm db:generate` | Generate Prisma client |
-| `pnpm db:migrate` | Run database migrations |
 | `pnpm db:studio` | Open Prisma Studio (DB GUI) |
 
 ### Mobile App (apps/mobile)
@@ -207,157 +228,38 @@ Scan the QR code with your iPhone camera to open in Expo Go.
 |---------|-------------|
 | `npx expo start` | Start Expo dev server |
 | `npx expo start --tunnel` | Start with tunnel (recommended) |
-| `npx expo start --clear` | Start with cache cleared |
-
----
-
-## Database Management
-
-### Start PostgreSQL
-
-```bash
-docker start todo-postgres
-```
-
-### Stop PostgreSQL
-
-```bash
-docker stop todo-postgres
-```
-
-### View Database with Prisma Studio
-
-```bash
-cd apps/web
-pnpm db:studio
-```
-
-Opens a GUI at http://localhost:5555
-
-### Reset Database
-
-```bash
-docker stop todo-postgres
-docker rm todo-postgres
-# Then re-run the docker run command from step 3
-```
-
----
-
-## API Endpoints
-
-### Web Authentication (NextAuth)
-- `GET /auth/signin` - Sign in page
-
-### Mobile Authentication
-- `POST /api/device-code/create` - Generate pairing code (requires web session)
-- `POST /api/mobile/auth/exchange` - Exchange code for tokens
-- `POST /api/mobile/auth/refresh` - Refresh access token
-- `POST /api/mobile/auth/logout` - Revoke tokens
-
-### Mobile API (Bearer token required)
-- `GET /api/mobile/items` - List items with filters
-- `GET /api/mobile/items/:id` - Get single item
-- `PATCH /api/mobile/items/:id` - Update item
-- `DELETE /api/mobile/items/:id` - Delete item
-- `POST /api/mobile/ingest/text` - Process text input
-- `POST /api/mobile/ingest/voice` - Process voice memo
-- `GET /api/mobile/settings` - Get user settings
-- `PATCH /api/mobile/settings` - Update settings
-
-### Push Notifications
-- `POST /api/push/register` - Register Expo push token
-- `POST /api/push/unregister` - Remove push token
-- `POST /api/push/test` - Send test notification
-
-### Cron
-- `POST /api/cron/daily-digest?secret=CRON_SECRET` - Trigger digest
-
----
-
-## Deployment
-
-### Vercel (Backend)
-
-1. Push your code to GitHub
-2. Import the repo in [Vercel](https://vercel.com)
-3. Set the root directory to `apps/web`
-4. Add environment variables:
-   - `DATABASE_URL` (use [Neon](https://neon.tech), [Supabase](https://supabase.com), or similar)
-   - `NEXTAUTH_URL` (your production URL)
-   - `NEXTAUTH_SECRET`
-   - `JWT_SECRET_MOBILE`
-   - `CRON_SECRET`
-   - `OPENAI_API_KEY`
-5. Deploy
-
-The cron job for daily digests is configured in `apps/web/vercel.json` to run hourly.
-
-### TestFlight (iOS App)
-
-Push notifications require a development build (not Expo Go):
-
-```bash
-cd apps/mobile
-
-# Login to Expo
-npx eas login
-
-# Initialize project
-npx eas init
-
-# Build for TestFlight
-npx eas build --profile production --platform ios
-
-# Submit to App Store Connect
-npx eas submit --platform ios
-```
+| `eas build --platform ios` | Build iOS app |
 
 ---
 
 ## Troubleshooting
 
-### Database Connection Error (P1001)
-
+### Database Connection Error
 ```
-Error: Can't reach database server at localhost:5432
+Can't reach database server
 ```
+**Fix:** Check your `DATABASE_URL` in `.env` is correct and Supabase project is running.
 
-**Fix:** Make sure Docker is running and the container is started:
-```bash
-docker start todo-postgres
-```
-
-### Mobile App Can't Connect
-
+### Mobile App Can't Connect to API
 ```
 Network request failed
 ```
-
 **Fix:**
-1. Ensure your phone and computer are on the same WiFi network
-2. Check that you're using your computer's IP (not `localhost`) in `apps/mobile/.env`
-3. Try using tunnel mode: `npx expo start --tunnel`
+1. For local dev: Use your computer's IP (not `localhost`) in `EXPO_PUBLIC_API_BASE_URL`
+2. For production: Use your Vercel URL
+3. Try tunnel mode: `npx expo start --tunnel`
 
-### React Native Version Mismatch
-
+### Push Notifications Not Working
+**Fix:** Push notifications require an EAS development build, not Expo Go.
+```bash
+eas build --platform ios --profile development
 ```
-Incompatible React versions
-```
-
-**Fix:** Make sure you're using Expo Go that matches SDK 54. Update Expo Go from the App Store if needed.
 
 ### OpenAI API Errors
-
 ```
 Failed to process text/voice
 ```
-
-**Fix:** Verify your `OPENAI_API_KEY` in `apps/web/.env` is valid and has credits.
-
-### Keyboard Covering Input
-
-If the keyboard blocks input fields, the app should handle this automatically. If not, try reloading the app.
+**Fix:** Verify your `OPENAI_API_KEY` is valid and has credits.
 
 ---
 
@@ -370,22 +272,27 @@ apps/web/
 ├── src/
 │   ├── app/
 │   │   ├── api/           # API routes
-│   │   ├── auth/          # Auth pages
+│   │   ├── auth/          # Auth pages (signin, callback)
 │   │   └── settings/      # Settings page
 │   ├── components/        # React components
-│   └── lib/               # Utilities (auth, push, etc.)
+│   └── lib/
+│       ├── supabase/      # Supabase clients (server, browser)
+│       ├── auth.ts        # Auth helpers
+│       └── push.ts        # Push notification helpers
 └── vercel.json            # Cron configuration
 
 apps/mobile/
 ├── app/
-│   ├── (tabs)/            # Tab screens (Today, Inbox, etc.)
-│   ├── auth/              # Pairing screen
+│   ├── (tabs)/            # Tab screens (Today, Inbox, Buckets, etc.)
+│   ├── auth/              # Login screen
 │   ├── capture/           # Text & voice capture
 │   └── item/              # Item detail screen
 ├── src/
 │   ├── components/        # React Native components
-│   ├── hooks/             # Custom hooks
-│   └── lib/               # API client, auth, storage
+│   ├── hooks/             # Custom hooks (useAuth)
+│   └── lib/
+│       ├── supabase.ts    # Supabase client
+│       └── api.ts         # API client
 ├── app.json               # Expo config
 └── eas.json               # EAS Build config
 
@@ -394,6 +301,17 @@ packages/shared/
     ├── types.ts           # TypeScript types
     └── schemas.ts         # Zod validation schemas
 ```
+
+---
+
+## Summary of Changes (Migration from NextAuth to Supabase)
+
+- ✅ Replaced NextAuth with Supabase Auth
+- ✅ Replaced device-code pairing with native Supabase auth
+- ✅ Using Supabase Postgres via Prisma
+- ✅ Deployed backend to Vercel
+- ✅ iOS app built with EAS for TestFlight/device install
+- ✅ Updated all API routes to use Supabase JWT verification
 
 ---
 

@@ -15,9 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.yourname.aitodo",
+      "bundleIdentifier": "com.joonlee.aiplanner",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app uses the microphone to record voice memos for task creation."
+        "NSMicrophoneUsageDescription": "This app uses the microphone to record voice memos for task creation.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -25,9 +26,11 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f172a"
       },
-      "package": "com.yourname.aitodo",
+      "package": "com.joonlee.aiplanner",
       "permissions": [
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "plugins": [
@@ -41,19 +44,19 @@
           "sounds": []
         }
       ],
-"expo-audio"
+      "expo-audio"
     ],
     "extra": {
       "router": {
         "origin": false
       },
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "9270a95b-30b4-4bcc-a8c0-79689203de12"
       }
     },
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "owner": "jlee122"
   }
 }
-

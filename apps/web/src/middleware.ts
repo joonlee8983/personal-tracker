@@ -34,16 +34,20 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protect routes that require authentication
+  // Check if request has Bearer token (mobile app)
+  const hasAuthHeader = request.headers.get("authorization")?.startsWith("Bearer ");
+  
+  // API routes handle their own auth (support both cookies and Bearer tokens)
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
+  
+  // Protect web routes that require authentication (not API routes)
   const protectedPaths = ["/", "/settings"];
-  const isProtectedPath = protectedPaths.some(
-    (path) => request.nextUrl.pathname === path || 
-              request.nextUrl.pathname.startsWith("/api/items") ||
-              request.nextUrl.pathname.startsWith("/api/ingest") ||
-              request.nextUrl.pathname.startsWith("/api/digest")
+  const isProtectedWebPath = protectedPaths.some(
+    (path) => request.nextUrl.pathname === path
   );
 
-  if (isProtectedPath && !user && !request.nextUrl.pathname.startsWith("/auth")) {
+  // Only redirect web pages, not API routes (they return 401 instead)
+  if (isProtectedWebPath && !user && !request.nextUrl.pathname.startsWith("/auth")) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     return NextResponse.redirect(url);
