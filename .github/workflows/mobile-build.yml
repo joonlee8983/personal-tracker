@@ -1,0 +1,88 @@
+name: Mobile App Build
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/shared/**'
+      - '.github/workflows/mobile-build.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
+      platform:
+        description: 'Platform'
+        required: true
+        default: 'ios'
+        type: choice
+        options:
+          - ios
+          - android
+          - all
+
+jobs:
+  build:
+    name: Build Mobile App
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build (Push to master)
+        if: github.event_name == 'push'
+        working-directory: apps/mobile
+        run: eas build --profile preview --platform ios --non-interactive
+
+      - name: Build (Manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: apps/mobile
+        run: |
+          if [ "${{ inputs.platform }}" = "all" ]; then
+            eas build --profile ${{ inputs.profile }} --platform all --non-interactive
+          else
+            eas build --profile ${{ inputs.profile }} --platform ${{ inputs.platform }} --non-interactive
+          fi
+
+  notify:
+    name: Notify on completion
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    
+    steps:
+      - name: Build succeeded
+        if: needs.build.result == 'success'
+        run: echo "✅ Mobile build completed successfully!"
+      
+      - name: Build failed
+        if: needs.build.result == 'failure'
+        run: |
+          echo "❌ Mobile build failed!"
+          exit 1

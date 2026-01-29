@@ -1,0 +1,51 @@
+name: Mobile App Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: 'Submit to App Store after build'
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build-and-submit:
+    name: Build & Submit to TestFlight
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build for Production
+        working-directory: apps/mobile
+        run: eas build --profile production --platform ios --non-interactive
+
+      - name: Submit to TestFlight
+        if: github.event_name == 'release' || inputs.submit == true
+        working-directory: apps/mobile
+        env:
+          EXPO_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: eas submit --profile production --platform ios --non-interactive --latest
