@@ -2,7 +2,9 @@ import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/src/hooks/useAuth";
+import { NotificationProvider } from "@/src/contexts/NotificationContext";
 import { useRouter, useSegments } from "expo-router";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 
@@ -73,9 +75,13 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <RootLayoutNav />
+          </NotificationProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

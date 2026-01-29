@@ -4,12 +4,12 @@
     "slug": "ai-todo",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/todo-app-logo.png",
     "scheme": "ai-todo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/todo-app-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#0f172a"
     },
@@ -23,7 +23,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/todo-app-logo.png",
         "backgroundColor": "#0f172a"
       },
       "package": "com.joonlee.aiplanner",

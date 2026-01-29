@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import type { Item } from "@todo/shared";
 import { format, isToday, isPast, parseISO } from "date-fns";
 
@@ -15,6 +16,7 @@ interface ItemCardProps {
   onToggleDone: () => void;
   onPress: () => void;
   onDelete?: () => void;
+  onConfirmReview?: () => void;
 }
 
 const TYPE_COLORS = {
@@ -37,13 +39,17 @@ const PRIORITY_COLORS = {
   P2: "#fbbf24",
 };
 
-export function ItemCard({ item, onToggleDone, onPress, onDelete }: ItemCardProps) {
-  const isDone = item.status === "done";
+export function ItemCard({ item, onToggleDone, onPress, onDelete, onConfirmReview }: ItemCardProps) {
+  // Local state for immediate visual feedback
+  const [isToggling, setIsToggling] = useState(false);
+  const isDone = isToggling ? !item.status === "done" : item.status === "done";
+  const showAsDone = isToggling ? item.status !== "done" : item.status === "done";
+  
   const typeColor = TYPE_COLORS[item.type];
   const typeIcon = TYPE_ICONS[item.type];
 
   const dueDate = item.dueAt ? parseISO(item.dueAt) : null;
-  const isOverdue = dueDate && isPast(dueDate) && !isToday(dueDate) && !isDone;
+  const isOverdue = dueDate && isPast(dueDate) && !isToday(dueDate) && !showAsDone;
   const isDueToday = dueDate && isToday(dueDate);
 
   const handleLongPress = () => {
@@ -59,11 +65,30 @@ export function ItemCard({ item, onToggleDone, onPress, onDelete }: ItemCardProp
     }
   };
 
+  const handleToggle = async () => {
+    // Immediate haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Show visual change immediately
+    setIsToggling(true);
+    
+    // Call parent handler
+    onToggleDone();
+    
+    // Reset local state after a short delay (parent state should have updated)
+    setTimeout(() => setIsToggling(false), 100);
+  };
+
+  const handleConfirmReview = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onConfirmReview?.();
+  };
+
   return (
     <TouchableOpacity
       style={[
         styles.card,
-        isDone && styles.cardDone,
+        showAsDone && styles.cardDone,
         item.needsReview && styles.cardReview,
       ]}
       onPress={onPress}
@@ -73,11 +98,12 @@ export function ItemCard({ item, onToggleDone, onPress, onDelete }: ItemCardProp
       <TouchableOpacity
         style={[
           styles.checkbox,
-          isDone && styles.checkboxDone,
+          showAsDone && styles.checkboxDone,
         ]}
-        onPress={onToggleDone}
+        onPress={handleToggle}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        {isDone && (
+        {showAsDone && (
           <Ionicons name="checkmark" size={16} color="#fff" />
         )}
       </TouchableOpacity>
@@ -117,7 +143,7 @@ export function ItemCard({ item, onToggleDone, onPress, onDelete }: ItemCardProp
         </View>
 
         <Text
-          style={[styles.title, isDone && styles.titleDone]}
+          style={[styles.title, showAsDone && styles.titleDone]}
           numberOfLines={2}
         >
           {item.title}
@@ -166,6 +192,18 @@ export function ItemCard({ item, onToggleDone, onPress, onDelete }: ItemCardProp
             </View>
           )}
         </View>
+
+        {/* Quick confirm button for items needing review */}
+        {item.needsReview && onConfirmReview && (
+          <TouchableOpacity
+            style={styles.confirmButton}
+            onPress={handleConfirmReview}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+            <Text style={styles.confirmButtonText}>Confirm</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
@@ -300,6 +338,22 @@ const styles = StyleSheet.create({
   moreText: {
     fontSize: 11,
     color: "#94a3b8",
+  },
+  confirmButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ecfdf5",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 8,
+    alignSelf: "flex-start",
+  },
+  confirmButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#10b981",
   },
 });
 

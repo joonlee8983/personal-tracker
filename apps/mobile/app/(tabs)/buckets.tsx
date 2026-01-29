@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useBucketItems } from "@/src/hooks/useItems";
 import { ItemList } from "@/src/components/ItemList";
@@ -49,6 +49,13 @@ export default function BucketsScreen() {
   const router = useRouter();
   const { items, isLoading, error, refetch, markDone, markActive, removeItem } =
     useBucketItems(selectedBucket);
+
+  // Auto-refresh when tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const handleToggleDone = (id: string, newStatus: string) => {
     if (newStatus === "done") {

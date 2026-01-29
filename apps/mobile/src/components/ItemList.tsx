@@ -18,6 +18,7 @@ interface ItemListProps {
   onToggleDone: (id: string, currentStatus: string) => void;
   onItemPress: (item: Item) => void;
   onDelete?: (id: string) => void;
+  onConfirmReview?: (id: string) => void;
   emptyTitle?: string;
   emptyMessage?: string;
   ListHeaderComponent?: React.ReactElement;
@@ -31,6 +32,7 @@ export function ItemList({
   onToggleDone,
   onItemPress,
   onDelete,
+  onConfirmReview,
   emptyTitle = "No items",
   emptyMessage = "Create your first item using the capture button below.",
   ListHeaderComponent,
@@ -76,6 +78,7 @@ export function ItemList({
           }
           onPress={() => onItemPress(item)}
           onDelete={onDelete ? () => onDelete(item.id) : undefined}
+          onConfirmReview={onConfirmReview ? () => onConfirmReview(item.id) : undefined}
         />
       )}
       refreshControl={

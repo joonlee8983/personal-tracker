@@ -8,15 +8,20 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Platform,
+  Modal,
+  Pressable,
 } from "react-native";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import type { Item, ItemType, Priority } from "@todo/shared";
 import { fetchItem, updateItem, deleteItem } from "@/src/lib/api";
 import { format, parseISO } from "date-fns";
 
 const TYPES: ItemType[] = ["todo", "reminder", "idea", "note"];
 const PRIORITIES: (Priority | null)[] = ["P0", "P1", "P2", null];
+const TYPES_WITH_DUE_DATE: ItemType[] = ["todo", "reminder"];
 
 const TYPE_COLORS = {
   todo: "#3b82f6",
@@ -39,6 +44,9 @@ export default function ItemDetailScreen() {
   const [details, setDetails] = useState("");
   const [type, setType] = useState<ItemType>("todo");
   const [priority, setPriority] = useState<Priority | null>(null);
+  const [dueAt, setDueAt] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
     loadItem();
@@ -57,6 +65,7 @@ export default function ItemDetailScreen() {
         setDetails(loadedItem.details || "");
         setType(loadedItem.type);
         setPriority(loadedItem.priority);
+        setDueAt(loadedItem.dueAt ? parseISO(loadedItem.dueAt) : null);
       } else {
         Alert.alert("Error", "Failed to load item");
         router.back();
@@ -80,6 +89,7 @@ export default function ItemDetailScreen() {
         details: details.trim() || null,
         type,
         priority,
+        dueAt: dueAt ? dueAt.toISOString() : null,
         needsReview: false, // Clear review flag on edit
       });
 
@@ -94,6 +104,43 @@ export default function ItemDetailScreen() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+    }
+    if (event.type === "set" && selectedDate) {
+      // Preserve time if already set, otherwise default to 9 AM
+      const newDate = new Date(selectedDate);
+      if (dueAt) {
+        newDate.setHours(dueAt.getHours(), dueAt.getMinutes());
+      } else {
+        newDate.setHours(9, 0, 0, 0);
+      }
+      setDueAt(newDate);
+      // On Android, show time picker after date is selected
+      if (Platform.OS === "android") {
+        setShowTimePicker(true);
+      }
+    }
+  };
+
+  const handleTimeChange = (event: DateTimePickerEvent, selectedTime?: Date) => {
+    if (Platform.OS === "android") {
+      setShowTimePicker(false);
+    }
+    if (event.type === "set" && selectedTime && dueAt) {
+      const newDate = new Date(dueAt);
+      newDate.setHours(selectedTime.getHours(), selectedTime.getMinutes());
+      setDueAt(newDate);
+    }
+  };
+
+  const clearDueDate = () => {
+    setDueAt(null);
+    setShowDatePicker(false);
+    setShowTimePicker(false);
   };
 
   const handleToggleStatus = async () => {
@@ -252,6 +299,92 @@ export default function ItemDetailScreen() {
                 ))}
               </View>
 
+              {/* Due Date - only for todo and reminder */}
+              {TYPES_WITH_DUE_DATE.includes(type) && (
+                <>
+                  <Text style={styles.label}>Due Date</Text>
+                  <View style={styles.dueDateContainer}>
+                    <TouchableOpacity
+                      style={styles.dueDateButton}
+                      onPress={() => setShowDatePicker(true)}
+                    >
+                      <Ionicons name="calendar-outline" size={20} color="#3b82f6" />
+                      <Text style={styles.dueDateText}>
+                        {dueAt ? format(dueAt, "EEE, MMM d, yyyy") : "Set date"}
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {dueAt && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.dueTimeButton}
+                          onPress={() => setShowTimePicker(true)}
+                        >
+                          <Ionicons name="time-outline" size={20} color="#3b82f6" />
+                          <Text style={styles.dueDateText}>
+                            {format(dueAt, "h:mm a")}
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity
+                          style={styles.clearDateButton}
+                          onPress={clearDueDate}
+                        >
+                          <Ionicons name="close-circle" size={20} color="#94a3b8" />
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+
+                  {/* Date Picker */}
+                  {showDatePicker && (
+                    <View style={styles.pickerContainer}>
+                      <DateTimePicker
+                        value={dueAt || new Date()}
+                        mode="date"
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
+                        onChange={handleDateChange}
+                        minimumDate={new Date()}
+                        themeVariant="light"
+                        textColor="#1e293b"
+                        accentColor="#3b82f6"
+                      />
+                      {Platform.OS === "ios" && (
+                        <TouchableOpacity
+                          style={styles.pickerDoneButton}
+                          onPress={() => setShowDatePicker(false)}
+                        >
+                          <Text style={styles.pickerDoneText}>Done</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Time Picker */}
+                  {showTimePicker && dueAt && (
+                    <View style={styles.pickerContainer}>
+                      <DateTimePicker
+                        value={dueAt}
+                        mode="time"
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
+                        onChange={handleTimeChange}
+                        themeVariant="light"
+                        textColor="#1e293b"
+                        accentColor="#3b82f6"
+                      />
+                      {Platform.OS === "ios" && (
+                        <TouchableOpacity
+                          style={styles.pickerDoneButton}
+                          onPress={() => setShowTimePicker(false)}
+                        >
+                          <Text style={styles.pickerDoneText}>Done</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
+
               <View style={styles.editActions}>
                 <TouchableOpacity
                   style={styles.cancelButton}
@@ -261,6 +394,9 @@ export default function ItemDetailScreen() {
                     setDetails(item.details || "");
                     setType(item.type);
                     setPriority(item.priority);
+                    setDueAt(item.dueAt ? parseISO(item.dueAt) : null);
+                    setShowDatePicker(false);
+                    setShowTimePicker(false);
                   }}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -580,6 +716,61 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#fff",
+  },
+  dueDateContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  dueDateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#3b82f6",
+  },
+  dueTimeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#3b82f6",
+  },
+  dueDateText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#3b82f6",
+  },
+  clearDateButton: {
+    padding: 8,
+  },
+  pickerContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  pickerDoneButton: {
+    alignItems: "center",
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+  },
+  pickerDoneText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#3b82f6",
   },
 });
 

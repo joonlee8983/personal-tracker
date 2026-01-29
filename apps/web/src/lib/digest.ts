@@ -2,22 +2,34 @@ import { prisma } from "./prisma";
 import { Resend } from "resend";
 import type { DigestData, DigestItem } from "@todo/shared";
 import { startOfDay, endOfDay, format } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
+import { toZonedTime, fromZonedTime } from "date-fns-tz";
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
-const TIMEZONE = process.env.DIGEST_TIMEZONE || "America/Los_Angeles";
+const DEFAULT_TIMEZONE = "America/Los_Angeles";
 
 /**
  * Generate digest data for a user
+ * @param userId - The user's ID
+ * @param timezone - The user's timezone (IANA format, e.g., "America/Los_Angeles")
  */
-export async function generateDigestData(userId: string): Promise<DigestData> {
+export async function generateDigestData(
+  userId: string,
+  timezone: string = DEFAULT_TIMEZONE
+): Promise<DigestData> {
   const now = new Date();
-  const zonedNow = toZonedTime(now, TIMEZONE);
-  const todayStart = startOfDay(zonedNow);
-  const todayEnd = endOfDay(zonedNow);
+  const zonedNow = toZonedTime(now, timezone);
+  
+  // Get local day boundaries
+  const localDayStart = startOfDay(zonedNow);
+  const localDayEnd = endOfDay(zonedNow);
+  
+  // Convert local day boundaries to UTC for database queries
+  // This ensures we find items due "today" in the user's timezone
+  const todayStart = fromZonedTime(localDayStart, timezone);
+  const todayEnd = fromZonedTime(localDayEnd, timezone);
 
   // Get top priorities (P0 and P1 items that are active)
   const topPriorities = await prisma.item.findMany({
@@ -266,11 +278,19 @@ export async function sendDigestEmail(
 
 /**
  * Run digest for a specific user
+ * Fetches the user's timezone from settings and generates their digest
  */
 export async function runDigestForUser(
   userId: string
 ): Promise<{ digestLog: { id: string } }> {
-  const data = await generateDigestData(userId);
+  // Fetch user's timezone from settings
+  const settings = await prisma.userSettings.findUnique({
+    where: { userId },
+    select: { timezone: true },
+  });
+  const timezone = settings?.timezone || DEFAULT_TIMEZONE;
+
+  const data = await generateDigestData(userId, timezone);
   const content = formatDigestContent(data);
   const itemsIncluded = [
     ...data.topPriorities.map((i) => i.id),

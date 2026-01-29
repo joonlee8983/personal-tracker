@@ -64,8 +64,8 @@ async function handleDigestCron(request: NextRequest) {
 
         console.log(`[Digest Cron] Sending digest to user ${settings.userId}`);
 
-        // Generate digest data
-        const digestData = await generateDigestData(settings.userId);
+        // Generate digest data using user's timezone
+        const digestData = await generateDigestData(settings.userId, settings.timezone);
         const content = formatDigestContent(digestData);
 
         // Create summary for push notification

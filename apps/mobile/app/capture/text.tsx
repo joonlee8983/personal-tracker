@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Alert,
   ScrollView,
   Keyboard,
@@ -15,11 +14,12 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ingestText } from "@/src/lib/api";
+import { useNotification } from "@/src/contexts/NotificationContext";
 
 export default function TextCaptureScreen() {
   const router = useRouter();
+  const { showNotification } = useNotification();
   const [text, setText] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     if (!text.trim()) {
@@ -28,34 +28,41 @@ export default function TextCaptureScreen() {
     }
 
     Keyboard.dismiss();
-    setIsSubmitting(true);
+    const inputText = text.trim();
+    
+    // Close modal immediately and process in background
+    router.back();
 
     try {
-      const result = await ingestText(text.trim());
+      const result = await ingestText(inputText);
 
       if (result.success && result.data) {
         const { item, needsReview } = result.data;
 
-        Alert.alert(
-          needsReview ? "Item Added to Inbox" : "Item Created",
-          `"${item.title}" was classified as ${item.type}${
-            needsReview ? " and needs review" : ""
-          }.`,
-          [
-            {
-              text: "OK",
-              onPress: () => router.back(),
-            },
-          ]
+        // Truncate title for notification
+        const shortTitle = item.title.length > 40 
+          ? item.title.slice(0, 40) + "..." 
+          : item.title;
+
+        showNotification(
+          "success",
+          needsReview ? "Added to Inbox" : "Task Created",
+          shortTitle
         );
       } else {
-        Alert.alert("Error", result.error || "Failed to create item");
+        showNotification(
+          "error",
+          "Failed to save",
+          result.error || "Item could not be created"
+        );
       }
     } catch (error) {
       console.error("Ingest error:", error);
-      Alert.alert("Error", "Network error. Please try again.");
-    } finally {
-      setIsSubmitting(false);
+      showNotification(
+        "error",
+        "Network Error",
+        "Please check your connection and try again"
+      );
     }
   };
 
@@ -82,7 +89,6 @@ export default function TextCaptureScreen() {
             autoFocus
             maxLength={5000}
             textAlignVertical="top"
-            editable={!isSubmitting}
           />
         </View>
 
@@ -101,19 +107,13 @@ export default function TextCaptureScreen() {
         <TouchableOpacity
           style={[
             styles.submitButton,
-            (!text.trim() || isSubmitting) && styles.submitButtonDisabled,
+            !text.trim() && styles.submitButtonDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={!text.trim() || isSubmitting}
+          disabled={!text.trim()}
         >
-          {isSubmitting ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Ionicons name="send" size={18} color="#fff" />
-              <Text style={styles.submitButtonText}>Send</Text>
-            </>
-          )}
+          <Ionicons name="send" size={18} color="#fff" />
+          <Text style={styles.submitButtonText}>Send</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

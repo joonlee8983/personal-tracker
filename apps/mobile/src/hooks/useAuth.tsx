@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import { supabase } from "@/src/lib/supabase";
+import { registerForPushNotifications } from "@/src/lib/notifications";
 import type { User, Session } from "@supabase/supabase-js";
 
 interface AuthContextType {
@@ -19,6 +20,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const pushRegistered = useRef(false);
+
+  // Register for push notifications when user is authenticated
+  useEffect(() => {
+    if (session && !pushRegistered.current) {
+      pushRegistered.current = true;
+      registerForPushNotifications()
+        .then((token) => {
+          if (token) {
+            console.log("Push notifications registered successfully");
+          } else {
+            console.log("Push notifications not available or not granted");
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to register push notifications:", error);
+        });
+    }
+  }, [session]);
 
   useEffect(() => {
     // Get initial session

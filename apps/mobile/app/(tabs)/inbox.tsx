@@ -1,14 +1,22 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { useInboxItems } from "@/src/hooks/useItems";
 import { ItemList } from "@/src/components/ItemList";
 import type { Item } from "@todo/shared";
 
 export default function InboxScreen() {
   const router = useRouter();
-  const { items, isLoading, error, refetch, markDone, markActive, removeItem } =
+  const { items, isLoading, error, refetch, markDone, markActive, removeItem, confirmReview } =
     useInboxItems();
+
+  // Auto-refresh when tab is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const handleToggleDone = (id: string, newStatus: string) => {
     if (newStatus === "done") {
@@ -42,6 +50,7 @@ export default function InboxScreen() {
         onToggleDone={handleToggleDone}
         onItemPress={handleItemPress}
         onDelete={removeItem}
+        onConfirmReview={confirmReview}
         emptyTitle="Inbox is empty"
         emptyMessage="All items have been reviewed. New items that need attention will appear here."
         ListHeaderComponent={<Header />}

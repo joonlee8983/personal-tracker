@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   Animated,
 } from "react-native";
@@ -18,11 +17,13 @@ import {
 } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
 import { ingestVoice } from "@/src/lib/api";
+import { useNotification } from "@/src/contexts/NotificationContext";
 
 type RecordingState = "idle" | "recording" | "recorded" | "processing";
 
 export default function VoiceCaptureScreen() {
   const router = useRouter();
+  const { showNotification } = useNotification();
   const [state, setState] = useState<RecordingState>("idle");
   const [duration, setDuration] = useState(0);
   const [permissionGranted, setPermissionGranted] = useState(false);
@@ -130,36 +131,42 @@ export default function VoiceCaptureScreen() {
       return;
     }
 
-    setState("processing");
+    // Close modal immediately and process in background
+    router.back();
 
+    // Process in background
+    const filename = `recording_${Date.now()}.m4a`;
+    
     try {
-      const result = await ingestVoice(recordingUri, "audio/m4a");
+      const result = await ingestVoice(recordingUri, filename);
 
       if (result.success && result.data) {
-        const { item, needsReview, transcription } = result.data;
+        const { item, needsReview } = result.data;
+        
+        // Truncate title for notification
+        const shortTitle = item.title.length > 40 
+          ? item.title.slice(0, 40) + "..." 
+          : item.title;
 
-        Alert.alert(
-          needsReview ? "Item Added to Inbox" : "Item Created",
-          `Transcription: "${transcription.slice(0, 100)}${
-            transcription.length > 100 ? "..." : ""
-          }"\n\nClassified as: ${item.type}${
-            needsReview ? " (needs review)" : ""
-          }`,
-          [
-            {
-              text: "OK",
-              onPress: () => router.back(),
-            },
-          ]
+        showNotification(
+          "success",
+          needsReview ? "Added to Inbox" : "Task Created",
+          shortTitle
         );
       } else {
-        Alert.alert("Error", result.error || "Failed to process voice memo");
-        setState("recorded");
+        showNotification(
+          "error",
+          "Failed to save",
+          result.error || "Voice memo could not be processed"
+        );
       }
     } catch (error) {
       console.error("Submit error:", error);
-      Alert.alert("Error", "Network error. Please try again.");
-      setState("recorded");
+      showNotification(
+        "error",
+        "Network Error",
+        "Please check your connection and try again"
+      );
     }
   };
 

@@ -16,6 +16,7 @@ interface UseItemsResult {
   markActive: (id: string) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
   updateItemData: (id: string, updates: Partial<Item>) => Promise<void>;
+  confirmReview: (id: string) => Promise<void>;
 }
 
 export function useItems(options: UseItemsOptions = {}): UseItemsResult {
@@ -98,6 +99,20 @@ export function useItems(options: UseItemsOptions = {}): UseItemsResult {
     }
   }, [refetch]);
 
+  const confirmReview = useCallback(async (id: string) => {
+    // Optimistic update - remove needsReview flag
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, needsReview: false } : item
+      )
+    );
+
+    const result = await updateItem(id, { needsReview: false });
+    if (!result.success) {
+      refetch();
+    }
+  }, [refetch]);
+
   return {
     items,
     isLoading,
@@ -107,6 +122,7 @@ export function useItems(options: UseItemsOptions = {}): UseItemsResult {
     markActive,
     removeItem,
     updateItemData,
+    confirmReview,
   };
 }
 

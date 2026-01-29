@@ -109,7 +109,7 @@ export async function ingestText(text: string): Promise<ApiResult<{ item: Item }
   });
 }
 
-export async function ingestVoice(audioUri: string, filename: string): Promise<ApiResult<{ item: Item }>> {
+export async function ingestVoice(audioUri: string, filename: string): Promise<ApiResult<{ item: Item; transcription: string; needsReview: boolean }>> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     

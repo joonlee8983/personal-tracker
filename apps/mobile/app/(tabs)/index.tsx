@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { useTodayItems } from "@/src/hooks/useItems";
 import { ItemList } from "@/src/components/ItemList";
 import type { Item } from "@todo/shared";
@@ -10,6 +10,13 @@ export default function TodayScreen() {
   const router = useRouter();
   const { items, isLoading, error, refetch, markDone, markActive, removeItem } =
     useTodayItems();
+
+  // Auto-refresh when tab is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const handleToggleDone = (id: string, newStatus: string) => {
     if (newStatus === "done") {
