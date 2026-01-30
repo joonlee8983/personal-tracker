@@ -189,15 +189,38 @@ export async function fetchDigest(limit: number = 7): Promise<ApiResult<{ digest
 }
 
 export async function fetchTodayDigest(): Promise<ApiResult<{ digest: DigestLog | null }>> {
-  const result = await fetchDigest(1);
+  const result = await fetchDigest(3); // Fetch last 3 to handle timezone edge cases
   if (!result.success || !result.data) {
     return { success: false, error: result.error };
   }
   
-  const today = new Date().toISOString().split("T")[0];
-  const todayDigest = result.data.digestLogs.find(
-    (d) => d.date.split("T")[0] === today
-  );
+  // Get today's date in local timezone
+  const now = new Date();
+  const localYear = now.getFullYear();
+  const localMonth = now.getMonth();
+  const localDay = now.getDate();
+  
+  // Find digest from today (comparing in local timezone)
+  const todayDigest = result.data.digestLogs.find((d) => {
+    const digestDate = new Date(d.date);
+    return (
+      digestDate.getFullYear() === localYear &&
+      digestDate.getMonth() === localMonth &&
+      digestDate.getDate() === localDay
+    );
+  });
+  
+  // If no digest for today, return the most recent one (within last 24 hours)
+  if (!todayDigest && result.data.digestLogs.length > 0) {
+    const latestDigest = result.data.digestLogs[0];
+    const digestTime = new Date(latestDigest.sentAt || latestDigest.date).getTime();
+    const hoursSinceDigest = (now.getTime() - digestTime) / (1000 * 60 * 60);
+    
+    // Show if within last 24 hours
+    if (hoursSinceDigest < 24) {
+      return { success: true, data: { digest: latestDigest } };
+    }
+  }
   
   return { success: true, data: { digest: todayDigest || null } };
 }

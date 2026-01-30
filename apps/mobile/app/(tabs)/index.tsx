@@ -1,8 +1,8 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, ScrollView, RefreshControl } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useTodayItems } from "@/src/hooks/useItems";
-import { ItemList } from "@/src/components/ItemList";
+import { ItemCard } from "@/src/components/ItemCard";
 import { DigestCard } from "@/src/components/DigestCard";
 import type { Item } from "@todo/shared";
 import { format } from "date-fns";
@@ -19,8 +19,8 @@ export default function TodayScreen() {
     }, [refetch])
   );
 
-  const handleToggleDone = (id: string, newStatus: string) => {
-    if (newStatus === "done") {
+  const handleToggleDone = (id: string, currentStatus: string) => {
+    if (currentStatus === "active") {
       markDone(id);
     } else {
       markActive(id);
@@ -32,30 +32,46 @@ export default function TodayScreen() {
   };
 
   // Separate items into categories
-  const overdueItems = items.filter(
+  const activeItems = items.filter((item) => item.status === "active");
+  
+  // Only show items completed today (based on updatedAt)
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const completedItems = items.filter(
+    (item) =>
+      item.status === "done" &&
+      item.updatedAt &&
+      format(new Date(item.updatedAt), "yyyy-MM-dd") === todayStr
+  );
+  
+  const overdueItems = activeItems.filter(
     (item) =>
       item.dueAt &&
       new Date(item.dueAt) < new Date() &&
-      item.status === "active"
+      format(new Date(item.dueAt), "yyyy-MM-dd") !== format(new Date(), "yyyy-MM-dd")
   );
-  const dueToday = items.filter(
+  const dueToday = activeItems.filter(
     (item) =>
       item.dueAt &&
-      format(new Date(item.dueAt), "yyyy-MM-dd") ===
-        format(new Date(), "yyyy-MM-dd") &&
-      item.status === "active"
+      format(new Date(item.dueAt), "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
   );
-  const priorityItems = items.filter(
+  const priorityItems = activeItems.filter(
     (item) =>
       item.priority &&
       ["P0", "P1"].includes(item.priority) &&
-      item.status === "active" &&
       !overdueItems.includes(item) &&
       !dueToday.includes(item)
   );
 
-  const Header = () => (
-    <View>
+  const todayActiveTasks = [...overdueItems, ...dueToday, ...priorityItems];
+
+  return (
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={isLoading} onRefresh={refetch} />
+      }
+    >
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.greeting}>Good {getGreeting()}!</Text>
         <Text style={styles.date}>{format(new Date(), "EEEE, MMMM d")}</Text>
@@ -84,30 +100,55 @@ export default function TodayScreen() {
           )}
         </View>
       </View>
-      
-      <DigestCard />
-      
-      {(overdueItems.length > 0 || dueToday.length > 0 || priorityItems.length > 0) && (
-        <Text style={styles.sectionHeader}>Today's Tasks</Text>
-      )}
-    </View>
-  );
 
-  return (
-    <View style={styles.container}>
-      <ItemList
-        items={[...overdueItems, ...dueToday, ...priorityItems]}
-        isLoading={isLoading}
-        error={error}
-        onRefresh={refetch}
-        onToggleDone={handleToggleDone}
-        onItemPress={handleItemPress}
-        onDelete={removeItem}
-        emptyTitle="All caught up! 🎉"
-        emptyMessage="No urgent tasks for today. Add something using the + button."
-        ListHeaderComponent={<Header />}
-      />
-    </View>
+      {/* Daily Digest - Always visible */}
+      <DigestCard />
+
+      {/* Active Tasks Section */}
+      {todayActiveTasks.length > 0 && (
+        <>
+          <Text style={styles.sectionHeader}>Today's Tasks</Text>
+          {todayActiveTasks.map((item) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              onToggleDone={() => handleToggleDone(item.id, item.status)}
+              onPress={() => handleItemPress(item)}
+              onDelete={() => removeItem(item.id)}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Completed Section */}
+      {completedItems.length > 0 && (
+        <>
+          <Text style={styles.sectionHeader}>Completed</Text>
+          {completedItems.map((item) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              onToggleDone={() => handleToggleDone(item.id, item.status)}
+              onPress={() => handleItemPress(item)}
+              onDelete={() => removeItem(item.id)}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Empty state - only when no tasks at all */}
+      {todayActiveTasks.length === 0 && completedItems.length === 0 && !isLoading && (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyTitle}>All caught up! 🎉</Text>
+          <Text style={styles.emptyMessage}>
+            No tasks for today. Add something using the + button.
+          </Text>
+        </View>
+      )}
+
+      {/* Bottom padding */}
+      <View style={{ height: 100 }} />
+    </ScrollView>
   );
 }
 
@@ -169,6 +210,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
+  },
+  emptyContainer: {
+    alignItems: "center",
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 8,
+  },
+  emptyMessage: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
   },
 });
 

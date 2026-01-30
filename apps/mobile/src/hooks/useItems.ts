@@ -136,7 +136,15 @@ export function useInboxItems() {
 export function useTodayItems() {
   const today = new Date().toISOString().split("T")[0];
   return useItems({
-    filters: { status: "active", dueFrom: "1970-01-01", dueTo: today },
+    filters: { dueFrom: "1970-01-01", dueTo: today },
+  });
+}
+
+export function useTodayItemsWithCompleted() {
+  // Fetch all items (active and done) for today view
+  const today = new Date().toISOString().split("T")[0];
+  return useItems({
+    filters: { dueFrom: "1970-01-01", dueTo: today },
   });
 }
 
