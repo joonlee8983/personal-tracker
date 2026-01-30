@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useTodayItems } from "@/src/hooks/useItems";
 import { ItemList } from "@/src/components/ItemList";
+import { DigestCard } from "@/src/components/DigestCard";
 import type { Item } from "@todo/shared";
 import { format } from "date-fns";
 
@@ -54,33 +55,41 @@ export default function TodayScreen() {
   );
 
   const Header = () => (
-    <View style={styles.header}>
-      <Text style={styles.greeting}>Good {getGreeting()}!</Text>
-      <Text style={styles.date}>{format(new Date(), "EEEE, MMMM d")}</Text>
+    <View>
+      <View style={styles.header}>
+        <Text style={styles.greeting}>Good {getGreeting()}!</Text>
+        <Text style={styles.date}>{format(new Date(), "EEEE, MMMM d")}</Text>
 
-      <View style={styles.stats}>
-        {overdueItems.length > 0 && (
-          <View style={[styles.statBadge, styles.overdueBadge]}>
-            <Text style={styles.statText}>
-              {overdueItems.length} overdue
-            </Text>
-          </View>
-        )}
-        {dueToday.length > 0 && (
-          <View style={[styles.statBadge, styles.todayBadge]}>
-            <Text style={styles.statText}>
-              {dueToday.length} due today
-            </Text>
-          </View>
-        )}
-        {priorityItems.length > 0 && (
-          <View style={[styles.statBadge, styles.priorityBadge]}>
-            <Text style={styles.statText}>
-              {priorityItems.length} high priority
-            </Text>
-          </View>
-        )}
+        <View style={styles.stats}>
+          {overdueItems.length > 0 && (
+            <View style={[styles.statBadge, styles.overdueBadge]}>
+              <Text style={styles.statText}>
+                {overdueItems.length} overdue
+              </Text>
+            </View>
+          )}
+          {dueToday.length > 0 && (
+            <View style={[styles.statBadge, styles.todayBadge]}>
+              <Text style={styles.statText}>
+                {dueToday.length} due today
+              </Text>
+            </View>
+          )}
+          {priorityItems.length > 0 && (
+            <View style={[styles.statBadge, styles.priorityBadge]}>
+              <Text style={styles.statText}>
+                {priorityItems.length} high priority
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
+      
+      <DigestCard />
+      
+      {(overdueItems.length > 0 || dueToday.length > 0 || priorityItems.length > 0) && (
+        <Text style={styles.sectionHeader}>Today's Tasks</Text>
+      )}
     </View>
   );
 
@@ -152,6 +161,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#475569",
+  },
+  sectionHeader: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
 });
 

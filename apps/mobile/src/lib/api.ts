@@ -172,6 +172,36 @@ export async function fetchSettings(): Promise<ApiResult<{ settings: any }>> {
   return apiRequest("/api/settings");
 }
 
+// Digest API
+export interface DigestLog {
+  id: string;
+  userId: string;
+  date: string;
+  content: string;
+  itemsIncluded: string[];
+  sentVia: string;
+  sentAt: string | null;
+  pushSentAt: string | null;
+}
+
+export async function fetchDigest(limit: number = 7): Promise<ApiResult<{ digestLogs: DigestLog[] }>> {
+  return apiRequest<{ digestLogs: DigestLog[] }>(`/api/digest?limit=${limit}`);
+}
+
+export async function fetchTodayDigest(): Promise<ApiResult<{ digest: DigestLog | null }>> {
+  const result = await fetchDigest(1);
+  if (!result.success || !result.data) {
+    return { success: false, error: result.error };
+  }
+  
+  const today = new Date().toISOString().split("T")[0];
+  const todayDigest = result.data.digestLogs.find(
+    (d) => d.date.split("T")[0] === today
+  );
+  
+  return { success: true, data: { digest: todayDigest || null } };
+}
+
 export async function updateSettings(data: Record<string, any>): Promise<ApiResult<{ settings: any }>> {
   return apiRequest("/api/settings", {
     method: "PATCH",
