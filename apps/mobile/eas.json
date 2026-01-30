@@ -25,11 +25,7 @@
   },
   "submit": {
     "production": {
-      "ios": {
-        "appleId": "your-apple-id@email.com",
-        "ascAppId": "your-app-store-connect-app-id",
-        "appleTeamId": "your-team-id"
-      }
+      "ios": {}
     }
   }
 }

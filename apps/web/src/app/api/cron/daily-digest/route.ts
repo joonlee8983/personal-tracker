@@ -50,10 +50,10 @@ async function handleDigestCron(request: NextRequest) {
 
     for (const settings of usersWithSettings) {
       try {
-        // Check if it's time to send for this user
-        const shouldSend = isTimeToSend(
+        // Check if we should send (not already sent today)
+        const shouldSend = shouldSendDigest(
+          settings.userId,
           settings.timezone,
-          settings.dailyDigestTime,
           settings.lastDigestSentAt
         );
 
@@ -159,38 +159,34 @@ async function handleDigestCron(request: NextRequest) {
 }
 
 /**
- * Check if it's time to send digest for a user based on their timezone and preferred time
+ * Check if digest should be sent (just checks if not already sent today)
+ * Since cron runs once daily at fixed UTC time, we only check daily limit
  */
-function isTimeToSend(
+function shouldSendDigest(
+  userId: string,
   timezone: string,
-  preferredTime: string, // "HH:MM"
   lastSentAt: Date | null
 ): boolean {
   try {
     const now = new Date();
     const userNow = toZonedTime(now, timezone);
-    const currentHour = parseInt(format(userNow, "HH"));
-    const [preferredHour] = preferredTime.split(":").map(Number);
+    const todayDate = format(userNow, "yyyy-MM-dd");
 
-    // Check if current hour matches preferred hour
-    if (currentHour !== preferredHour) {
-      return false;
-    }
-
-    // Check if already sent today
+    // Check if already sent today in user's timezone
     if (lastSentAt) {
       const lastSentLocal = toZonedTime(lastSentAt, timezone);
       const lastSentDate = format(lastSentLocal, "yyyy-MM-dd");
-      const todayDate = format(userNow, "yyyy-MM-dd");
 
       if (lastSentDate === todayDate) {
-        return false; // Already sent today
+        console.log(`[Digest Cron] User ${userId}: Skipping - already sent today (lastSent: ${lastSentDate})`);
+        return false;
       }
     }
 
+    console.log(`[Digest Cron] User ${userId}: Will send digest (timezone: ${timezone})`);
     return true;
   } catch (error) {
-    console.error(`Invalid timezone: ${timezone}`, error);
+    console.error(`[Digest Cron] User ${userId}: Error checking send status`, error);
     return false;
   }
 }
