@@ -21,12 +21,18 @@ export interface ApiResult<T> {
 
 // Auth helper
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (error) {
+    console.log("[API] Session error:", error.message);
+  }
   
   if (!session?.access_token) {
-    console.log("[API] No access token available");
+    console.log("[API] No access token available, session:", session ? "exists but no token" : "null");
     return {};
   }
+  
+  console.log("[API] Got access token, expires:", session.expires_at ? new Date(session.expires_at * 1000).toISOString() : "unknown");
   
   return {
     Authorization: `Bearer ${session.access_token}`,
@@ -189,10 +195,20 @@ export async function fetchDigest(limit: number = 7): Promise<ApiResult<{ digest
 }
 
 export async function fetchTodayDigest(): Promise<ApiResult<{ digest: DigestLog | null }>> {
+  console.log("[fetchTodayDigest] Fetching digests...");
   const result = await fetchDigest(3); // Fetch last 3 to handle timezone edge cases
+  
+  console.log("[fetchTodayDigest] API result:", result.success, "digestLogs count:", result.data?.digestLogs?.length || 0);
+  
   if (!result.success || !result.data) {
+    console.log("[fetchTodayDigest] API error:", result.error);
     return { success: false, error: result.error };
   }
+  
+  // Log the digests we got
+  result.data.digestLogs.forEach((d, i) => {
+    console.log(`[fetchTodayDigest] Digest ${i}: date=${d.date}, sentAt=${d.sentAt}`);
+  });
   
   // Get today's date in local timezone
   const now = new Date();
@@ -200,14 +216,18 @@ export async function fetchTodayDigest(): Promise<ApiResult<{ digest: DigestLog 
   const localMonth = now.getMonth();
   const localDay = now.getDate();
   
+  console.log(`[fetchTodayDigest] Today local: ${localYear}-${localMonth + 1}-${localDay}`);
+  
   // Find digest from today (comparing in local timezone)
   const todayDigest = result.data.digestLogs.find((d) => {
     const digestDate = new Date(d.date);
-    return (
+    const matches = (
       digestDate.getFullYear() === localYear &&
       digestDate.getMonth() === localMonth &&
       digestDate.getDate() === localDay
     );
+    console.log(`[fetchTodayDigest] Checking digest date ${d.date} -> ${digestDate.getFullYear()}-${digestDate.getMonth() + 1}-${digestDate.getDate()}, matches: ${matches}`);
+    return matches;
   });
   
   // If no digest for today, return the most recent one (within last 24 hours)
@@ -216,12 +236,16 @@ export async function fetchTodayDigest(): Promise<ApiResult<{ digest: DigestLog 
     const digestTime = new Date(latestDigest.sentAt || latestDigest.date).getTime();
     const hoursSinceDigest = (now.getTime() - digestTime) / (1000 * 60 * 60);
     
+    console.log(`[fetchTodayDigest] No today match, latest digest is ${hoursSinceDigest.toFixed(1)} hours old`);
+    
     // Show if within last 24 hours
     if (hoursSinceDigest < 24) {
+      console.log("[fetchTodayDigest] Returning latest digest (within 24h)");
       return { success: true, data: { digest: latestDigest } };
     }
   }
   
+  console.log("[fetchTodayDigest] Returning:", todayDigest ? "todayDigest" : "null");
   return { success: true, data: { digest: todayDigest || null } };
 }
 
