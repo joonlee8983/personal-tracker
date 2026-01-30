@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fetchTodayDigest, DigestLog } from "@/src/lib/api";
+import { useAuth } from "@/src/hooks/useAuth";
 import { format } from "date-fns";
 
 interface DigestCardProps {
@@ -15,46 +16,45 @@ interface DigestCardProps {
 }
 
 export function DigestCard({ onRefresh }: DigestCardProps) {
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [digest, setDigest] = useState<DigestLog | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDigest = async (retryCount = 0) => {
+  const loadDigest = useCallback(async () => {
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     
-    console.log("[DigestCard] Fetching digest... (attempt", retryCount + 1, ")");
     const result = await fetchTodayDigest();
-    console.log("[DigestCard] Result:", JSON.stringify(result, null, 2));
     
     if (result.success && result.data) {
-      console.log("[DigestCard] Digest found:", result.data.digest ? "yes" : "no");
       setDigest(result.data.digest);
-      setIsLoading(false);
-    } else if (result.error === "Unauthorized" && retryCount < 3) {
-      // Auth might not be ready yet, retry after a delay
-      console.log("[DigestCard] Unauthorized, retrying in 1s...");
-      setTimeout(() => loadDigest(retryCount + 1), 1000);
     } else {
-      console.log("[DigestCard] Error:", result.error);
       setError(result.error || "Failed to load digest");
-      setIsLoading(false);
     }
-  };
+    
+    setIsLoading(false);
+  }, [isAuthenticated]);
 
+  // Load when auth is ready
   useEffect(() => {
-    // Delay initial load slightly to let auth initialize
-    const timer = setTimeout(() => loadDigest(), 500);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!isAuthLoading && isAuthenticated) {
+      loadDigest();
+    }
+  }, [isAuthLoading, isAuthenticated, loadDigest]);
 
   // Refresh when parent requests
   useEffect(() => {
-    if (onRefresh) {
+    if (onRefresh && isAuthenticated) {
       loadDigest();
     }
-  }, [onRefresh]);
+  }, [onRefresh, isAuthenticated, loadDigest]);
 
   if (isLoading) {
     return (
